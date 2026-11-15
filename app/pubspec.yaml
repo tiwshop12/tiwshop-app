@@ -1,7 +1,7 @@
 name: gauge   # ต้องตรงกับ --project-name ใน build-apk.yml (แพ็กเกจ Android = com.ftp.gauge)
 description: TIWSHOP smart gauge app (BLE client for the TIWSHOP SMART GAUGE ESP32 K-Line gauge)
 publish_to: none
-version: 1.1.2+4   # TIWSHOP 1.1.0 (ยังเป็นแพ็กเกจ com.ftp.gauge = ติดตั้งทับแอพเดิมได้ ค่าเดิมไม่หาย) ; ออกรุ่นใหม่ให้เพิ่มเลขหลัง + ทุกครั้ง
+version: 1.2.0+5   # TIWSHOP 1.1.0 (ยังเป็นแพ็กเกจ com.ftp.gauge = ติดตั้งทับแอพเดิมได้ ค่าเดิมไม่หาย) ; ออกรุ่นใหม่ให้เพิ่มเลขหลัง + ทุกครั้ง
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -31,6 +31,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/bg.jpg
+    - assets/bg_gray.jpg
     - assets/logo.png
     - assets/splash.jpg
   fonts:

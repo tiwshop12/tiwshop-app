@@ -45,6 +45,27 @@ const kThemes = <AppTheme>[
   AppTheme('น้ำเงิน', Color(0xFF2A5BFF), Color(0xFFAFC2FF)),
 ];
 
+// ---------- พื้นหลัง (ตั้งค่า > พื้นหลัง) : เหมือนเกจ TIWSHOP ----------
+// color == null และ i == 0 = รูปเดิม (เขียว) | สีอื่น = รูปเดียวกันย้อมสี | ขาวดำ = ย้อมขาว | ดำล้วน = พื้นดำ (เร็วที่สุด)
+class BgOpt {
+  final String name;
+  final Color? color;
+  const BgOpt(this.name, this.color);
+}
+
+const kBgs = <BgOpt>[
+  BgOpt('เดิม', null),
+  BgOpt('แดง', Color(0xFFFF2A2A)),
+  BgOpt('ส้ม', Color(0xFFFF8A1E)),
+  BgOpt('เหลือง', Color(0xFFFFE01A)),
+  BgOpt('ฟ้า', Color(0xFF18D8FF)),
+  BgOpt('น้ำเงิน', Color(0xFF1E6BFF)),
+  BgOpt('ม่วง', Color(0xFFA14DFF)),
+  BgOpt('ชมพู', Color(0xFFFF2BD6)),
+  BgOpt('ขาวดำ', Color(0xFFFFFFFF)),
+  BgOpt('ดำล้วน', Color(0xFF000000)),
+];
+
 // เวอร์ชันเฟิร์มแวร์ที่แอพรุ่นนี้ออกแบบมาให้ใช้คู่กัน (แสดงเทียบในหน้า SETTING)
 const kAppFw = '1.0.0';
 
@@ -115,6 +136,7 @@ class Cfg extends ChangeNotifier {
   static final Cfg i = Cfg._();
   Cfg._();
   int themeIdx = 3;
+  int bgIdx = 0; // พื้นหลัง (kBgs)
   int shift = 10000; // SHIFT LIGHT RPM
   int tempWarn = 105; // °C
   bool speedGps = true; // true = GPS, false = ECU
@@ -136,6 +158,8 @@ class Cfg extends ChangeNotifier {
       final p = await SharedPreferences.getInstance();
       final v = p.getInt('theme') ?? 3; // TIWSHOP: ค่าเริ่มต้น = เขียวนีออน
       themeIdx = (v >= 0 && v < kThemes.length) ? v : 0;
+      final b = p.getInt('bg') ?? 0;
+      bgIdx = (b >= 0 && b < kBgs.length) ? b : 0;
       shift = (p.getInt('shift') ?? 10000).clamp(1000, 15000).toInt();
       tempWarn = (p.getInt('tempWarn') ?? 105).clamp(60, 150).toInt();
       speedGps = p.getBool('speedGps') ?? true;
@@ -150,6 +174,7 @@ class Cfg extends ChangeNotifier {
     try {
       final p = await SharedPreferences.getInstance();
       await p.setInt('theme', themeIdx);
+      await p.setInt('bg', bgIdx);
       await p.setInt('shift', shift);
       await p.setInt('tempWarn', tempWarn);
       await p.setBool('speedGps', speedGps);
@@ -161,6 +186,11 @@ class Cfg extends ChangeNotifier {
 
   Future<void> setTheme(int v) {
     themeIdx = v;
+    return _save();
+  }
+
+  Future<void> setBg(int v) {
+    bgIdx = v;
     return _save();
   }
 
@@ -1079,10 +1109,17 @@ Future<void> main() async {
 // ---------- พื้นหลัง TIWSHOP (รังผึ้งเขียว ลดความสว่างไว้ในรูปแล้ว) ----------
 class _Bg extends StatelessWidget {
   final double dim; // มืดเพิ่ม 0..1 (หน้า SETTING)
-  const _Bg({this.dim = 0});
+  final int idx; // kBgs
+  const _Bg({this.dim = 0, this.idx = 0});
   @override
   Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
-        Image.asset('assets/bg.jpg', fit: BoxFit.cover, filterQuality: FilterQuality.low, gaplessPlayback: true),
+        if (idx == kBgs.length - 1)
+          const ColoredBox(color: Colors.black)
+        else if (idx <= 0 || idx >= kBgs.length)
+          Image.asset('assets/bg.jpg', fit: BoxFit.cover, filterQuality: FilterQuality.low, gaplessPlayback: true)
+        else // รูปขาวดำย้อมสี (คูณสี) -> ได้พื้นหลังสีที่เลือก
+          Image.asset('assets/bg_gray.jpg', fit: BoxFit.cover, filterQuality: FilterQuality.low, gaplessPlayback: true,
+              color: kBgs[idx].color, colorBlendMode: BlendMode.modulate),
         if (dim > 0) ColoredBox(color: Colors.black.withOpacity(dim)),
       ]);
 }
@@ -1269,7 +1306,7 @@ class _GaugePageState extends State<GaugePage> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(fit: StackFit.expand, children: [
-        const RepaintBoundary(child: _Bg()),
+        RepaintBoundary(child: _Bg(idx: cfg.bgIdx)),
         SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
@@ -2774,7 +2811,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(fit: StackFit.expand, children: [
-        const RepaintBoundary(child: _Bg(dim: 0.35)),
+        RepaintBoundary(child: _Bg(dim: 0.35, idx: cfg.bgIdx)),
         SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -2790,6 +2827,10 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: Column(children: [
                         _panel(th, 'ธีมสี', Wrap(spacing: 14, runSpacing: 14, children: [
                           for (int i = 0; i < kThemes.length; i++) _themeDot(i),
+                        ])),
+                        const SizedBox(height: 12),
+                        _panel(th, 'พื้นหลัง', Wrap(spacing: 12, runSpacing: 12, children: [
+                          for (int i = 0; i < kBgs.length; i++) _bgDot(i),
                         ])),
                         const SizedBox(height: 12),
                         _panel(
@@ -2922,6 +2963,28 @@ class _SettingsPageState extends State<SettingsPage> {
           ]),
         ),
       );
+
+  Widget _bgDot(int i) {
+    final b = kBgs[i];
+    final sel = Cfg.i.bgIdx == i;
+    final Color fill = i == 0 ? const Color(0xFF2E8A1A) : (i == kBgs.length - 1 ? Colors.black : Color.lerp(Colors.black, b.color, i == 8 ? 0.45 : 0.6)!);
+    return GestureDetector(
+      onTap: () => Cfg.i.setBg(i),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 52, height: 36,
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(color: sel ? Colors.white : Colors.white24, width: sel ? 3 : 1),
+          ),
+          child: sel ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
+        ),
+        const SizedBox(height: 4),
+        Text(b.name, style: TextStyle(fontSize: 11, color: sel ? Colors.white : Colors.white60)),
+      ]),
+    );
+  }
 
   Widget _themeDot(int i) {
     final t = kThemes[i];
