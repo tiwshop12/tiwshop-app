@@ -2268,8 +2268,7 @@ class _FxPanelPainter extends CustomPainter {
           ..strokeWidth = 1);
     // มุมฉากสว่าง 4 มุม
     final arm = math.min(14.0, math.min(s.width, s.height) * 0.22);
-    final glow = Paint()
-      ..color = col
+    final cornerGlow = Paint()
       ..strokeWidth = 4
       ..style = PaintingStyle.stroke
       ..color = col.withOpacity(0.45);
@@ -2283,7 +2282,7 @@ class _FxPanelPainter extends CustomPainter {
         ..moveTo(cx + sx * 4, cy + sy * (4 + arm))
         ..lineTo(cx + sx * 4, cy + sy * 4)
         ..lineTo(cx + sx * (4 + arm), cy + sy * 4);
-      canvas.drawPath(p, glow);
+      canvas.drawPath(p, cornerGlow);
       canvas.drawPath(p, line);
     }
   }
