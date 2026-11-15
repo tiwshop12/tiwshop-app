@@ -764,6 +764,12 @@ class GaugeController extends ChangeNotifier {
       try {
         await dev.requestMtu(185);
       } catch (_) {}
+      // TIWSHOP: ขอช่วงเชื่อมต่อ BLE แบบเร็ว (Android) -> ค่าจากเกจมาถึงทันที ไม่ดีเลย์
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        try {
+          await dev.requestConnectionPriority(connectionPriorityRequest: ConnectionPriority.high);
+        } catch (_) {}
+      }
       final services = await dev.discoverServices();
       final svc = services.firstWhere((s) => s.uuid == kSvc);
       final data = svc.characteristics.firstWhere((c) => c.uuid == kData);
@@ -1176,7 +1182,6 @@ Future<void> pickKey(BuildContext context, List<int> arr, int idx) {
               color: const Color(0xF2060606),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: th.c, width: 1.2),
-              boxShadow: [BoxShadow(color: th.c.withOpacity(0.4), blurRadius: 14)],
             ),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('SELECT', style: TextStyle(fontFamily: kFont, fontSize: 12, color: th.c)),
@@ -1303,9 +1308,17 @@ class _GaugePageState extends State<GaugePage> {
                       c.dtcWatch(i == 5); // หน้า DTC: ให้เกจอ่านโค้ดต่อเนื่อง
                       setState(() => page = i);
                     },
+                    // TIWSHOP: สร้างเฉพาะหน้าที่เห็นบนจอ (เดิมสร้างครบ 6 หน้าทุกครั้งที่ค่าเปลี่ยน)
                     children: [
-                      for (final w in [_mainPage(th, blinkOn), _gridPage(th, blinkOn), _graphPage(th), _afrPage(th), _dragPage(th), _dtcPage(th)])
-                        RepaintBoundary(child: w),
+                      for (int pi = 0; pi < 6; pi++)
+                        RepaintBoundary(child: Builder(builder: (_) => switch (pi) {
+                              0 => _mainPage(th, blinkOn),
+                              1 => _gridPage(th, blinkOn),
+                              2 => _graphPage(th),
+                              3 => _afrPage(th),
+                              4 => _dragPage(th),
+                              _ => _dtcPage(th),
+                            })),
                     ],
                   ),
                 ),
@@ -1325,7 +1338,6 @@ class _GaugePageState extends State<GaugePage> {
                   decoration: BoxDecoration(
                     color: i == page ? th.c : Colors.white30,
                     borderRadius: BorderRadius.circular(1.5),
-                    boxShadow: i == page ? [BoxShadow(color: th.c, blurRadius: 6)] : null,
                   ),
                 ),
               const SizedBox(width: 8),
@@ -1403,7 +1415,7 @@ class _GaugePageState extends State<GaugePage> {
       th,
       Column(children: [
         Row(children: [
-          Text('AFR LOG', style: TextStyle(fontFamily: kFont, fontSize: 12, color: th.c, shadows: [Shadow(color: th.c, blurRadius: 8)])),
+          Text('AFR LOG', style: TextStyle(fontFamily: kFont, fontSize: 12, color: th.c)),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -1516,14 +1528,14 @@ class _GaugePageState extends State<GaugePage> {
         Row(children: [
           Icon(Icons.signal_cellular_alt, color: gpsCol, size: 22),
           const SizedBox(width: 4),
-          Text('GPS', style: TextStyle(fontFamily: kFont, fontSize: 12, color: gpsCol, shadows: [Shadow(color: gpsCol, blurRadius: 8)])),
+          Text('GPS', style: TextStyle(fontFamily: kFont, fontSize: 12, color: gpsCol)),
           const SizedBox(width: 16),
           Text('Satellites in use: ${c.satUsed ?? '--'} of ${c.satTotal ?? '--'}', style: lab),
           if (c.satMax > 0) Text('  (max ${c.satMax})', style: const TextStyle(fontSize: 11, color: Colors.white38)),
           const SizedBox(width: 16),
           Text('Speed ${sp == null ? '--' : sp.round()} ± $acc km/h', style: lab),
           const Spacer(),
-          Text(stTxt, style: TextStyle(fontFamily: kFont, fontSize: 11, color: stCol, shadows: [Shadow(color: stCol, blurRadius: 8)])),
+          Text(stTxt, style: TextStyle(fontFamily: kFont, fontSize: 11, color: stCol)),
         ]),
         pad: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       ),
@@ -1549,8 +1561,7 @@ class _GaugePageState extends State<GaugePage> {
                 style: TextStyle(
                     fontFamily: kFont,
                     fontSize: head ? 9 : size,
-                    color: head ? Colors.white54 : (col ?? Colors.white),
-                    shadows: head || col == null ? null : [Shadow(color: col, blurRadius: 8)])),
+                    color: head ? Colors.white54 : (col ?? Colors.white),)),
           ),
         );
     Widget row(Widget a, Widget b, Widget d, {bool last = false}) => Expanded(
@@ -1610,7 +1621,7 @@ class _GaugePageState extends State<GaugePage> {
                     builder: (_, v, __) => FittedBox(
                       fit: BoxFit.scaleDown,
                       child: _monoNum('${v.toStringAsFixed(4)} s',
-                          TextStyle(fontFamily: kFont, fontSize: 26, color: Colors.white, shadows: [Shadow(color: th.c, blurRadius: 10)])),
+                          TextStyle(fontFamily: kFont, fontSize: 26, color: Colors.white)),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -1637,7 +1648,6 @@ class _GaugePageState extends State<GaugePage> {
             color: Colors.black45,
             border: Border.all(color: kBad, width: 1.4),
             borderRadius: BorderRadius.circular(6),
-            boxShadow: [BoxShadow(color: kBad.withOpacity(0.3), blurRadius: 8)],
           ),
           child: const Text('RESET LOG', style: TextStyle(fontFamily: kFont, fontSize: 10, color: kBad)),
         ),
@@ -1694,7 +1704,7 @@ class _GaugePageState extends State<GaugePage> {
                         decoration: BoxDecoration(
                           color: lit ? col : Colors.white.withOpacity(0.12),
                           borderRadius: BorderRadius.circular(2),
-                          boxShadow: lit ? [BoxShadow(color: col.withOpacity(0.6), blurRadius: 5)] : null,
+                          
                         ),
                       );
                     }),
@@ -1714,7 +1724,7 @@ class _GaugePageState extends State<GaugePage> {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerRight,
             child: Text('${sp == null ? '--' : sp.round()} km/h',
-                style: TextStyle(fontFamily: kFont, fontSize: 18, color: Colors.white, shadows: [Shadow(color: th.c, blurRadius: 9)])),
+                style: TextStyle(fontFamily: kFont, fontSize: 18, color: Colors.white)),
           ),
         ),
       ]),
@@ -1782,10 +1792,10 @@ class _GaugePageState extends State<GaugePage> {
           border: Border.all(color: col.withOpacity(0.55)),
         ),
         child: Row(children: [
-          Container(width: 9, height: 9, decoration: BoxDecoration(color: col, shape: BoxShape.circle, boxShadow: [BoxShadow(color: col, blurRadius: 6)])),
+          Container(width: 9, height: 9, decoration: BoxDecoration(color: col, shape: BoxShape.circle)),
           const SizedBox(width: 10),
           Text('${d[0].toString().padLeft(2, '0')}-${d[1].toString().padLeft(2, '0')}',
-              style: TextStyle(fontFamily: kFont, fontSize: 13, color: Colors.white, shadows: [Shadow(color: col, blurRadius: 6)])),
+              style: TextStyle(fontFamily: kFont, fontSize: 13, color: Colors.white)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1815,7 +1825,7 @@ class _GaugePageState extends State<GaugePage> {
                   Icon(ic, color: Colors.white, size: 20),
                   const SizedBox(width: 8),
                   Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(en, style: TextStyle(fontFamily: kFont, fontSize: 12, color: Colors.white, shadows: [Shadow(color: col, blurRadius: 8)])),
+                    Text(en, style: TextStyle(fontFamily: kFont, fontSize: 12, color: Colors.white)),
                     Text(thTxt, style: const TextStyle(fontSize: 11, color: Colors.white70)),
                   ]),
                 ]),
@@ -1857,7 +1867,7 @@ class _GaugePageState extends State<GaugePage> {
           th,
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Text('DTC', style: TextStyle(fontFamily: kFont, fontSize: 13, color: th.c, shadows: [Shadow(color: th.c, blurRadius: 8)])),
+              Text('DTC', style: TextStyle(fontFamily: kFont, fontSize: 13, color: th.c)),
               const SizedBox(width: 10),
               const Expanded(child: Text('รหัสปัญหาจากกล่อง ECU (HONDA)', style: TextStyle(fontSize: 12, color: Colors.white60))),
               if (c.dtcReading) SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: th.c)),
@@ -1900,7 +1910,6 @@ class _GaugePageState extends State<GaugePage> {
             color: const Color(0xCC060606),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: th.c.withOpacity(0.85), width: 1.1),
-            boxShadow: [BoxShadow(color: th.c.withOpacity(0.35), blurRadius: 10)],
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(11),
@@ -1924,7 +1933,7 @@ class _GaugePageState extends State<GaugePage> {
           color: const Color(0xCC060606),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: on ? col : Colors.white24, width: on ? 1.6 : 1.0),
-          boxShadow: on ? [BoxShadow(color: col.withOpacity(0.4), blurRadius: 10)] : null,
+          
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -1936,7 +1945,7 @@ class _GaugePageState extends State<GaugePage> {
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(v == null ? '--' : v.toStringAsFixed(dec),
-                    style: TextStyle(fontFamily: kFont, fontSize: 22, color: Colors.white, shadows: [Shadow(color: col, blurRadius: 8)])),
+                    style: TextStyle(fontFamily: kFont, fontSize: 22, color: Colors.white)),
               ),
             ),
           ),
@@ -2017,7 +2026,7 @@ class _GaugePageState extends State<GaugePage> {
         child: RepaintBoundary(
           child: TweenAnimationBuilder<double>(
             tween: Tween<double>(end: frac),
-            duration: const Duration(milliseconds: 140),
+            duration: const Duration(milliseconds: 70),   // TIWSHOP: เข็มตามค่าไวขึ้น (เดิม 140 ms)
             builder: (_, v, __) => CustomPaint(painter: GaugePainter(frac: v, r: r, th: th, shift: cfg.shift)),
           ),
         ),
@@ -2034,7 +2043,6 @@ class _GaugePageState extends State<GaugePage> {
                 child: Text(sp == null ? '--' : sp.toStringAsFixed(0),
                     style: TextStyle(fontFamily: kFont, fontSize: 60, color: Colors.white, shadows: [
                       Shadow(color: Color.lerp(th.c, Colors.black, 0.55)!, offset: const Offset(2.5, 2.5)),
-                      Shadow(color: th.c.withOpacity(0.9), blurRadius: 10),
                     ])),
               ),
             ),
@@ -2044,7 +2052,6 @@ class _GaugePageState extends State<GaugePage> {
                 color: Color.lerp(th.c, Colors.black, 0.55),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: th.c2, width: 1),
-                boxShadow: [BoxShadow(color: th.c.withOpacity(0.5), blurRadius: 8)],
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Text('km/h · ${c.speedSrc}', style: TextStyle(fontSize: math.max(10.0, r * 0.085), color: Colors.white, fontWeight: FontWeight.bold)),
@@ -2071,7 +2078,7 @@ class _GaugePageState extends State<GaugePage> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(color: Colors.black54, border: Border.all(color: Colors.white24), borderRadius: BorderRadius.circular(6)),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 7, height: 7, decoration: BoxDecoration(color: col, shape: BoxShape.circle, boxShadow: [BoxShadow(color: col, blurRadius: 5)])),
+          Container(width: 7, height: 7, decoration: BoxDecoration(color: col, shape: BoxShape.circle)),
           const SizedBox(width: 6),
           Text(s, style: const TextStyle(fontFamily: kFont, fontSize: 8.5)),
         ]),
@@ -2086,7 +2093,6 @@ class _GaugePageState extends State<GaugePage> {
             color: active ? th.c.withOpacity(0.3) : Colors.black45,
             border: Border.all(color: th.c, width: 1.4),
             borderRadius: BorderRadius.circular(6),
-            boxShadow: [BoxShadow(color: th.c.withOpacity(0.35), blurRadius: 8)],
           ),
           child: Text(s, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
         ),
@@ -2101,7 +2107,6 @@ class _GaugePageState extends State<GaugePage> {
             color: Colors.black45,
             border: Border.all(color: th.c, width: 1.4),
             borderRadius: BorderRadius.circular(6),
-            boxShadow: [BoxShadow(color: th.c.withOpacity(0.35), blurRadius: 8)],
           ),
           child: Icon(ic, size: 20, color: th.c),
         ),
@@ -2162,10 +2167,9 @@ class GraphPainter extends CustomPainter {
       canvas.drawPath(
           path,
           Paint()
-            ..color = cols[i].withOpacity(0.55)
+            ..color = cols[i].withOpacity(0.25)
             ..style = PaintingStyle.stroke
-            ..strokeWidth = 5
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+            ..strokeWidth = 6);
       canvas.drawPath(
           path,
           Paint()
@@ -2224,9 +2228,8 @@ class FxPanel extends StatelessWidget {
           stops: const [0.0, 0.78],
         ),
         border: Border.all(color: Color.lerp(col, Colors.white, 0.15)!.withOpacity(strong ? 1.0 : 0.9), width: strong ? 2.0 : 1.3),
-        boxShadow: [BoxShadow(color: col.withOpacity(glow), blurRadius: strong ? 20 : 14, spreadRadius: 0.5)],
       ),
-      child: CustomPaint(foregroundPainter: _FxPanelPainter(col, radius)),
+      child: CustomPaint(foregroundPainter: _FxPanelPainter(col, radius, glow, strong)),
     );
     return Stack(fit: StackFit.passthrough, clipBehavior: Clip.none, children: [
       Positioned.fill(child: RepaintBoundary(child: frame)),
@@ -2237,11 +2240,20 @@ class FxPanel extends StatelessWidget {
 
 class _FxPanelPainter extends CustomPainter {
   final Color col;
-  final double radius;
-  _FxPanelPainter(this.col, this.radius);
+  final double radius, glow;
+  final bool strong;
+  _FxPanelPainter(this.col, this.radius, [this.glow = 0.45, this.strong = false]);
 
   @override
   void paint(Canvas canvas, Size s) {
+    // TIWSHOP: แสงเรืองรอบกรอบแบบไม่ใช้เบลอ (เส้นโปร่งแสงซ้อน 3 ชั้น) -> วาดเร็วมาก
+    final box = RRect.fromRectAndRadius(Offset.zero & s, Radius.circular(radius));
+    for (final k in const [(7.0, 0.10), (4.5, 0.20), (2.2, 0.38)]) {
+      canvas.drawRRect(box.inflate(k.$1 * (strong ? 1.4 : 1.0) / 2), Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = k.$1 * (strong ? 1.4 : 1.0)
+        ..color = col.withOpacity((k.$2 * glow / 0.45).clamp(0.0, 1.0).toDouble()));
+    }
     // เงากระจกครึ่งบน
     final sheen = RRect.fromRectAndRadius(Rect.fromLTWH(3, 3, s.width - 6, s.height * 0.42), Radius.circular(math.max(0.0, radius - 3)));
     canvas.drawRRect(
@@ -2258,9 +2270,9 @@ class _FxPanelPainter extends CustomPainter {
     final arm = math.min(14.0, math.min(s.width, s.height) * 0.22);
     final glow = Paint()
       ..color = col
-      ..strokeWidth = 2.4
+      ..strokeWidth = 4
       ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+      ..color = col.withOpacity(0.45);
     final line = Paint()
       ..color = Color.lerp(col, Colors.white, 0.5)!
       ..strokeWidth = 1.4
@@ -2277,7 +2289,7 @@ class _FxPanelPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_FxPanelPainter o) => o.col != col || o.radius != radius;
+  bool shouldRepaint(_FxPanelPainter o) => o.col != col || o.radius != radius || o.glow != glow || o.strong != strong;
 }
 
 // ---------- บาร์แท่งเซกเมนต์ (แท่งเฉียง ผิวมัน + เรืองแสง) ----------
@@ -2305,10 +2317,9 @@ class _SegBarPainter extends CustomPainter {
     final litN = List.generate(n, (i) => (i + 0.5) / n <= frac).where((b) => b).length;
     if (litN > 0) {
       final xe = sk + litN * (sw + gap) + sk;
-      canvas.drawRect(Rect.fromLTWH(sk * 0.5, 0, xe - sk * 0.5, s.height), Paint()
-        ..shader = LinearGradient(colors: [color(0.0).withOpacity(0.7), color(litN / n).withOpacity(0.7)])
-            .createShader(Rect.fromLTWH(0, 0, xe, s.height))
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
+      canvas.drawRect(Rect.fromLTWH(sk * 0.5, -2, xe - sk * 0.5, s.height + 4), Paint()
+        ..shader = LinearGradient(colors: [color(0.0).withOpacity(0.25), color(litN / n).withOpacity(0.25)])
+            .createShader(Rect.fromLTWH(0, 0, xe, s.height)));
     }
     for (int i = 0; i < n; i++) {
       final pos = (i + 0.5) / n;
@@ -2379,7 +2390,6 @@ class StatTile extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Color.lerp(col, Colors.black, 0.35),
                     borderRadius: BorderRadius.circular(4),
-                    boxShadow: [BoxShadow(color: col.withOpacity(0.5), blurRadius: 5)],
                   ),
                   child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontFamily: kFont, fontSize: 8, color: Colors.white)),
                 ),
@@ -2393,7 +2403,6 @@ class StatTile extends StatelessWidget {
                   child: Text(value,
                       style: TextStyle(fontFamily: kFont, fontSize: valueSize, color: vcol, shadows: [
                         Shadow(color: Color.lerp(glow, Colors.black, 0.55)!, offset: const Offset(1.5, 1.5)),
-                        Shadow(color: glow.withOpacity(0.8), blurRadius: 6),
                       ])),
                 ),
               ),
@@ -2463,11 +2472,12 @@ class GaugeDialPainter extends CustomPainter {
       ..strokeWidth = 1
       ..color = const Color(0xFF0F141E));
     // เส้นนีออนขอบนอกสีธีม
-    canvas.drawArc(circ(r), start, sweep, false, Paint()
-      ..color = th.c
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
+    for (final k in const [(10.0, 0.10), (6.0, 0.22), (3.5, 0.5)]) {
+      canvas.drawArc(circ(r), start, sweep, false, Paint()
+        ..color = th.c.withOpacity(k.$2)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = k.$1);
+    }
     canvas.drawArc(circ(r), start, sweep, false, Paint()
       ..color = Color.lerp(th.c, Colors.white, 0.4)!
       ..style = PaintingStyle.stroke
@@ -2502,8 +2512,7 @@ class GaugeDialPainter extends CustomPainter {
       canvas.drawArc(circ(r2), start + sweep * zs, sweep * (1 - zs), false, Paint()
         ..color = const Color(0xFFFF2A2A)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.6
-        ..maskFilter = const MaskFilter.blur(BlurStyle.solid, 2));
+        ..strokeWidth = 3);
     }
 
     // ขีดหลัก/ขีดย่อย และตัวเลข 0..15
@@ -2560,12 +2569,11 @@ class GaugePainter extends CustomPainter {
       canvas.drawArc(circ(rb), start, seg * litN, false, Paint()
         ..shader = SweepGradient(
           endAngle: sweep,
-          colors: [for (int k = 0; k <= 10; k++) rpmColor(k / 10 * kMaxRpm, shift).withOpacity(0.75)],
+          colors: [for (int k = 0; k <= 10; k++) rpmColor(k / 10 * kMaxRpm, shift).withOpacity(0.28)],
           transform: const GradientRotation(start),
         ).createShader(circ(rb))
         ..style = PaintingStyle.stroke
-        ..strokeWidth = thick * 1.3
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+        ..strokeWidth = thick * 1.6);
     }
     for (int i = 0; i < litN && i < _gN; i++) {
       final pos = (i + 0.5) / _gN;
@@ -2590,9 +2598,9 @@ class GaugePainter extends CustomPainter {
     // แสงวาบที่หัวแท่ง
     if (litN > 0) {
       final a = start + seg * (litN - 0.5);
-      canvas.drawCircle(c + Offset(math.cos(a), math.sin(a)) * rb, thick * 0.9, Paint()
-        ..color = const Color(0xFF8CD7FF).withOpacity(0.55)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9));
+      final tipC = c + Offset(math.cos(a), math.sin(a)) * rb;
+      canvas.drawCircle(tipC, thick * 1.3, Paint()..color = const Color(0xFF8CD7FF).withOpacity(0.18));
+      canvas.drawCircle(tipC, thick * 0.8, Paint()..color = const Color(0xFF8CD7FF).withOpacity(0.28));
     }
 
     // เข็มทรงสามเหลี่ยม 2 โทน + แสงสีธีม
@@ -2600,10 +2608,9 @@ class GaugePainter extends CustomPainter {
     final dir = Offset(math.cos(ang), math.sin(ang)), nrm = Offset(-dir.dy, dir.dx);
     final p1 = c + dir * (r * 0.30), p2 = c + dir * (r * 0.86);
     canvas.drawLine(p1, p2, Paint()
-      ..color = th.c
-      ..strokeWidth = 6
-      ..strokeCap = StrokeCap.round
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
+      ..color = th.c.withOpacity(0.35)
+      ..strokeWidth = 9
+      ..strokeCap = StrokeCap.round);
     canvas.drawPath(Path()..moveTo((p1 + nrm * 3.2).dx, (p1 + nrm * 3.2).dy)..lineTo(p2.dx, p2.dy)..lineTo((p1 - nrm * 3.2).dx, (p1 - nrm * 3.2).dy)..close(),
         Paint()..color = Colors.white);
     canvas.drawPath(Path()..moveTo((p1 + nrm * 3.2).dx, (p1 + nrm * 3.2).dy)..lineTo(p2.dx, p2.dy)..lineTo(p1.dx, p1.dy)..close(),
@@ -2775,7 +2782,7 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Column(children: [
               Row(children: [
                 IconButton(onPressed: () => Navigator.of(context).pop(), icon: Icon(Icons.arrow_back, color: th.c)),
-                Text('SETTING', style: TextStyle(fontFamily: kFont, fontSize: 18, color: th.c, shadows: [Shadow(color: th.c, blurRadius: 10)])),
+                Text('SETTING', style: TextStyle(fontFamily: kFont, fontSize: 18, color: th.c)),
               ]),
               Expanded(
                 child: SingleChildScrollView(
@@ -2838,7 +2845,6 @@ class _SettingsPageState extends State<SettingsPage> {
                                 color: Colors.black,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(color: th.c, width: 1.4),
-                                boxShadow: [BoxShadow(color: th.c.withOpacity(0.4), blurRadius: 10)],
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(7),
@@ -2892,7 +2898,7 @@ class _SettingsPageState extends State<SettingsPage> {
               width: 110,
               child: Center(
                 child: Text(value,
-                    style: TextStyle(fontFamily: kFont, fontSize: 17, color: Colors.white, shadows: [Shadow(color: th.c, blurRadius: 9)])),
+                    style: TextStyle(fontFamily: kFont, fontSize: 17, color: Colors.white)),
               ),
             ),
             const SizedBox(width: 10),
@@ -2911,7 +2917,7 @@ class _SettingsPageState extends State<SettingsPage> {
         child: FxPanel(
           col: th.c, glow: 0.3, padding: const EdgeInsets.all(12),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, shadows: [Shadow(color: th.c, blurRadius: 8)])),
+            Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 12),
             child,
           ]),
@@ -2930,7 +2936,6 @@ class _SettingsPageState extends State<SettingsPage> {
             color: t.c,
             shape: BoxShape.circle,
             border: Border.all(color: sel ? Colors.white : Colors.white24, width: sel ? 3 : 1),
-            boxShadow: [BoxShadow(color: t.c.withOpacity(sel ? 0.9 : 0.4), blurRadius: sel ? 14 : 6)],
           ),
           child: sel ? const Icon(Icons.check, color: Colors.black) : null,
         ),
@@ -3373,7 +3378,7 @@ class _AfrLogPageState extends State<AfrLogPage> {
                   onTap: () => Navigator.of(context).pop(),
                   child: Row(children: [
                     Icon(Icons.chevron_left, color: th.c, size: 26),
-                    Text('AFR LOG', style: TextStyle(fontFamily: kFont, fontSize: 15, color: th.c, shadows: [Shadow(color: th.c, blurRadius: 8)])),
+                    Text('AFR LOG', style: TextStyle(fontFamily: kFont, fontSize: 15, color: th.c)),
                   ]),
                 ),
                 const SizedBox(width: 12),
