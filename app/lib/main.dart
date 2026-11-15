@@ -3076,7 +3076,7 @@ class _TP {
   static void center(Canvas cv, TextPainter tp, Offset c) => tp.paint(cv, c - Offset(tp.width / 2, tp.height / 2));
 }
 
-// ---------- หน้าต่างเลือกเกจ (กด "เชื่อมต่อ") : เกจแต่ละตัวชื่อไม่ซ้ำ FTP-GAUGE-XXXX ----------
+// ---------- หน้าต่างเลือกเกจ (กด "เชื่อมต่อ") : เกจแต่ละตัวชื่อไม่ซ้ำ TIWSHOP-XXXX (เกจรุ่นเก่า FTP-GAUGE-XXXX ก็ต่อได้: ค้นหาด้วย UUID) ----------
 Future<void> pickGauge(BuildContext context, GaugeController c) async {
   if (!await c.prepareBle()) {
     if (context.mounted) {
@@ -3115,7 +3115,7 @@ Future<void> pickGauge(BuildContext context, GaugeController c) async {
       final list = found.values.toList()..sort((a, b) => b.rssi.compareTo(a.rssi));
       String nm(ScanResult r) {
         final a = r.advertisementData.advName;
-        return a.isNotEmpty ? a : (r.device.platformName.isNotEmpty ? r.device.platformName : 'FTP-GAUGE');
+        return a.isNotEmpty ? a : (r.device.platformName.isNotEmpty ? r.device.platformName : 'TIWSHOP');
       }
 
       Widget bars(int rssi) {
@@ -3136,7 +3136,7 @@ Future<void> pickGauge(BuildContext context, GaugeController c) async {
         content: SizedBox(
           width: 520,
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(list.isEmpty ? (scanning ? 'กำลังค้นหาเกจ FTP-GAUGE ใกล้ ๆ …' : 'ไม่พบเกจ — เปิดเกจ และตรวจว่าเปิด MOBILE APP (BLE) = ON')
+            Text(list.isEmpty ? (scanning ? 'กำลังค้นหาเกจ TIWSHOP ใกล้ ๆ …' : 'ไม่พบเกจ — เปิดเกจ และตรวจว่าเปิด MOBILE APP (BLE) = ON')
                 : 'พบ ${list.length} เกจ เรียงจากสัญญาณแรงสุด (ใกล้สุด)',
                 style: const TextStyle(fontSize: 12.5, color: Colors.white60)),
             const SizedBox(height: 8),
