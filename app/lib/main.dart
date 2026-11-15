@@ -1473,21 +1473,21 @@ class _GaugePageState extends State<GaugePage> {
                   child: PageView(
                     controller: pc,
                     onPageChanged: (i) {
-                      c.graphVisible = i == 2;
-                      c.dtcWatch(i == 5); // หน้า DTC: ให้เกจอ่านโค้ดต่อเนื่อง
+                      c.graphVisible = i == 3;
+                      c.dtcWatch(i == 6); // หน้า DTC: ให้เกจอ่านโค้ดต่อเนื่อง
                       setState(() => page = i);
                     },
                     // TIWSHOP: สร้างเฉพาะหน้าที่เห็นบนจอ (เดิมสร้างครบ 6 หน้าทุกครั้งที่ค่าเปลี่ยน)
                     children: [
                       for (int pi = 0; pi < 8; pi++)
                         RepaintBoundary(child: Builder(builder: (_) => switch (pi) {
-                              0 => _mainPage(th, blinkOn),
-                              1 => _gridPage(th, blinkOn),
-                              2 => _graphPage(th),
-                              3 => _afrPage(th),
-                              4 => _dragPage(th),
-                              5 => _dtcPage(th),
-                              6 => DashPage(c: c),
+                              0 => DashPage(c: c),
+                              1 => _mainPage(th, blinkOn),
+                              2 => _gridPage(th, blinkOn),
+                              3 => _graphPage(th),
+                              4 => _afrPage(th),
+                              5 => _dragPage(th),
+                              6 => _dtcPage(th),
                               _ => TopSpeedPage(c: c),
                             })),
                     ],
@@ -1512,7 +1512,7 @@ class _GaugePageState extends State<GaugePage> {
                   ),
                 ),
               const SizedBox(width: 8),
-              Text(const ['GAUGE', 'GRID', 'GRAPH', 'AFR LOG', 'DRAG LOG', 'DTC', 'DASH', 'TOP SPEED'][page], style: const TextStyle(fontFamily: kFont, fontSize: 7, color: Colors.white54)),
+              Text(const ['DASH', 'GAUGE', 'GRID', 'GRAPH', 'AFR LOG', 'DRAG LOG', 'DTC', 'TOP SPEED'][page], style: const TextStyle(fontFamily: kFont, fontSize: 7, color: Colors.white54)),
             ]),
           ),
         ),
@@ -4099,7 +4099,6 @@ class _DashStatic extends CustomPainter {
     }
     _dtxt(cv, 'x1000', _polar(tc, 62, tr - bw * 1.5), tr * 0.065, Colors.white54, w: FontWeight.w700);
     _dtxt(cv, 'RPM', _polar(tc, 62, tr - bw * 1.5) + Offset(0, tr * 0.075), tr * 0.065, Colors.white54, w: FontWeight.w700);
-    _dtxt(cv, 'TIWSHOP', tc + Offset(0, -tr * 0.55), tr * 0.1, c, family: kFont, italic: false);
     // เกจย่อย
     _arcGauge(cv, g.tempC, g.gr, '40', '150', 'TEMP', '°C');
     _arcGauge(cv, g.tpsC, g.gr, '0', '100', 'TPS', '');
