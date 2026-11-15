@@ -695,9 +695,28 @@ class GaugeController extends ChangeNotifier {
   String mnStr(String k) => mm[k] == null ? '0' : mm[k]![0].toStringAsFixed(0);
   String mxStr(String k) => mm[k] == null ? '0' : mm[k]![1].toStringAsFixed(0);
 
+  // ----- หน้า TOP SPEED: ความเร็วสูงสุด (GPS ก่อน ไม่มีใช้ ECU) + RPM/AFR/เวลา ณ จังหวะนั้น -----
+  double tsBest = 0;
+  double? tsRpm, tsAfr;
+  DateTime? tsAt;
+  double? get tsNow => demo ? (gpsSpeed ?? t.speed) : (gpsOk ? gpsSpeed : (ecuLive ? t.speed : null));
+  String get tsSrc => (demo || gpsOk) ? 'GPS' : (ecuLive ? 'ECU' : '--');
+  void tsClear() {
+    tsBest = 0; tsRpm = null; tsAfr = null; tsAt = null;
+    notifyListeners();
+  }
+
   void _track() {
     final s = shownSpeed;
     if (s != null && s > topSpeed) topSpeed = s;
+    final ts = tsNow;
+    if (ts != null && ts >= 1 && ts > tsBest) {
+      tsBest = ts;
+      final live = demo || ecuLive;
+      tsRpm = live ? t.rpm : null;
+      tsAfr = live ? t.afr : null;
+      tsAt = DateTime.now();
+    }
     if (t.fresh || demo) {
       _mmUpdate('rpm', t.rpm, skipZero: true);
     }
@@ -1460,14 +1479,16 @@ class _GaugePageState extends State<GaugePage> {
                     },
                     // TIWSHOP: สร้างเฉพาะหน้าที่เห็นบนจอ (เดิมสร้างครบ 6 หน้าทุกครั้งที่ค่าเปลี่ยน)
                     children: [
-                      for (int pi = 0; pi < 6; pi++)
+                      for (int pi = 0; pi < 8; pi++)
                         RepaintBoundary(child: Builder(builder: (_) => switch (pi) {
                               0 => _mainPage(th, blinkOn),
                               1 => _gridPage(th, blinkOn),
                               2 => _graphPage(th),
                               3 => _afrPage(th),
                               4 => _dragPage(th),
-                              _ => _dtcPage(th),
+                              5 => _dtcPage(th),
+                              6 => DashPage(c: c),
+                              _ => TopSpeedPage(c: c),
                             })),
                     ],
                   ),
@@ -1481,7 +1502,7 @@ class _GaugePageState extends State<GaugePage> {
           left: 0, right: 0, bottom: 3,
           child: IgnorePointer(
             child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              for (int i = 0; i < 6; i++)
+              for (int i = 0; i < 8; i++)
                 Container(
                   margin: const EdgeInsets.symmetric(horizontal: 3),
                   width: i == page ? 24 : 14, height: 5,
@@ -1491,7 +1512,7 @@ class _GaugePageState extends State<GaugePage> {
                   ),
                 ),
               const SizedBox(width: 8),
-              Text(const ['GAUGE', 'GRID', 'GRAPH', 'AFR LOG', 'DRAG LOG', 'DTC'][page], style: const TextStyle(fontFamily: kFont, fontSize: 7, color: Colors.white54)),
+              Text(const ['GAUGE', 'GRID', 'GRAPH', 'AFR LOG', 'DRAG LOG', 'DTC', 'DASH', 'TOP SPEED'][page], style: const TextStyle(fontFamily: kFont, fontSize: 7, color: Colors.white54)),
             ]),
           ),
         ),
@@ -2973,7 +2994,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                   !connected ? 'ยังไม่ได้เชื่อมต่อ' : (fw != null ? 'FW $fw' : 'ไม่ทราบ (เฟิร์มแวร์เก่า)'),
                                   col: !connected ? kAmber : (fw != null ? kGreen : kAmber)),
                               const SizedBox(height: 6),
-                              _infoRow('แอพออกแบบสำหรับ', 'FW $kAppFw'),
+                              _infoRow('TIWSHOP', 'FW $kAppFw'),
                               if (connected && fw != null && fw != kAppFw)
                                 const Padding(
                                   padding: EdgeInsets.only(top: 6),
@@ -3986,4 +4007,389 @@ class _FlashPageState extends State<FlashPage> {
           ),
         ),
       );
+}
+
+// ===================== หน้า DASH + TOP SPEED (TIWSHOP) =====================
+const _kMon = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+String _dmy(DateTime d) => '${d.day} ${_kMon[d.month - 1]} ${d.year + 543}';   // ปี พ.ศ.
+String _hm(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+String _hms(DateTime d) => '${_hm(d)}:${d.second.toString().padLeft(2, '0')}';
+double _rad(double deg) => deg * math.pi / 180;
+Offset _polar(Offset c, double deg, double r) => c + Offset(math.cos(_rad(deg)), math.sin(_rad(deg))) * r;
+
+// วาดข้อความ: al = จุดยึด (center = กึ่งกลางข้อความอยู่ที่ p)
+void _dtxt(Canvas cv, String s, Offset p, double size, Color col,
+    {FontWeight w = FontWeight.w800, bool italic = true, String? family, Alignment al = Alignment.center}) {
+  final tp = TextPainter(
+    text: TextSpan(
+        text: s,
+        style: TextStyle(
+            fontSize: size, color: col, fontWeight: w, height: 1.0, fontFamily: family,
+            fontStyle: italic ? FontStyle.italic : FontStyle.normal)),
+    textDirection: TextDirection.ltr,
+  )..layout();
+  tp.paint(cv, Offset(p.dx - tp.width * (al.x + 1) / 2, p.dy - tp.height * (al.y + 1) / 2));
+}
+
+// ตำแหน่งชิ้นส่วนบนหน้า DASH (ใช้ร่วมกันระหว่างชั้นนิ่งกับชั้นค่าสด)
+class _DashGeo {
+  late final Offset tc, tempC, tpsC, mapC, afrC;
+  late final double tr, gr, ar;
+  late final Rect top;
+  _DashGeo(Size s) {
+    final w = s.width, h = s.height;
+    tr = math.min(h * 0.48, w * 0.24);
+    tc = Offset(w * 0.5, h * 0.5);
+    gr = math.min(w * 0.095, h * 0.21);
+    tempC = Offset(w * 0.12, h * 0.29);
+    tpsC = Offset(w * 0.12, h * 0.76);
+    mapC = Offset(w * 0.88, h * 0.27);
+    ar = math.min(w * 0.08, h * 0.16);
+    afrC = Offset(w * 0.88, h * 0.81);
+    top = Rect.fromCenter(center: Offset(w * 0.88, h * 0.555), width: w * 0.2, height: h * 0.14);
+  }
+}
+
+int _dashRmax(int shift) => (((shift / 1000).ceil() + 2) * 1000).clamp(8000, 16000).toInt();
+
+// ---- ชั้นนิ่ง: วงรอบเครื่อง สเกล ตัวเลข โซนแดง กรอบเกจย่อย (วาดใหม่เฉพาะตอนขนาด/สีธีมเปลี่ยน) ----
+class _DashStatic extends CustomPainter {
+  final Color c;
+  final int shift;
+  _DashStatic(this.c, this.shift);
+
+  void _arcGauge(Canvas cv, Offset ctr, double r, String lo, String hi, String label, String unit) {
+    final sw = r * 0.26, rr = r - sw / 2;
+    final rect = Rect.fromCircle(center: ctr, radius: rr);
+    cv.drawArc(rect, _rad(135), _rad(270), false, Paint()..style = PaintingStyle.stroke..strokeWidth = sw..color = const Color(0xFF41464E));
+    final ol = Paint()..style = PaintingStyle.stroke..strokeWidth = (1.3)..color = Colors.white70;
+    cv.drawArc(Rect.fromCircle(center: ctr, radius: r), _rad(135), _rad(270), false, ol);
+    cv.drawArc(Rect.fromCircle(center: ctr, radius: r - sw), _rad(135), _rad(270), false, ol);
+    _dtxt(cv, lo, _polar(ctr, 135, rr) + Offset(0, sw * 1.05), r * 0.17, Colors.white70);
+    _dtxt(cv, hi, _polar(ctr, 45, rr) + Offset(0, sw * 1.05), r * 0.17, Colors.white70);
+    _dtxt(cv, label, ctr + Offset(0, r * 0.62), r * 0.24, const Color(0xFFFFE01A), w: FontWeight.w900);
+    if (unit.isNotEmpty) _dtxt(cv, unit, ctr + Offset(0, r * 0.3), r * 0.15, Colors.white60, italic: false, w: FontWeight.w600);
+  }
+
+  @override
+  void paint(Canvas cv, Size s) {
+    final g = _DashGeo(s);
+    final rmax = _dashRmax(shift);
+    final tc = g.tc, tr = g.tr, bw = tr * 0.2;
+    // วงนอกบาง (สีธีม) + แถบขาว + จานดำด้านใน
+    cv.drawCircle(tc, tr + 3, Paint()..style = PaintingStyle.stroke..strokeWidth = (2)..color = c.withOpacity(0.7));
+    cv.drawCircle(tc, tr - bw / 2, Paint()..style = PaintingStyle.stroke..strokeWidth = bw..color = const Color(0xFFE9ECEF));
+    cv.drawCircle(tc, tr - bw, Paint()..color = Colors.black);
+    cv.drawCircle(tc, tr - bw, Paint()..style = PaintingStyle.stroke..strokeWidth = (3)..color = const Color(0xFF2A2F36));
+    // โซนแดง (ขอบนอกของแถบ)
+    final double a0 = 135 + 270 * (shift / rmax).clamp(0.0, 1.0).toDouble();
+    cv.drawArc(Rect.fromCircle(center: tc, radius: tr - bw * 0.07), _rad(a0), _rad(405 - a0), false,
+        Paint()..style = PaintingStyle.stroke..strokeWidth = (bw * 0.14)..color = const Color(0xFFE8202A));
+    // สเกล + ตัวเลข x1000
+    for (int r = 0; r <= rmax; r += 250) {
+      final double a = 135 + 270 * r / rmax;
+      final maj = r % 1000 == 0, mid = r % 500 == 0;
+      final red = r >= shift;
+      final len = maj ? bw * 0.45 : (mid ? bw * 0.3 : bw * 0.18);
+      cv.drawLine(_polar(tc, a, tr - bw * 0.16), _polar(tc, a, tr - bw * 0.16 - len),
+          Paint()..strokeWidth = (maj ? 2.6 : 1.3)..color = red ? const Color(0xFFE8202A) : const Color(0xFF15181C));
+      if (maj) {
+        _dtxt(cv, '${r ~/ 1000}', _polar(tc, a, tr - bw * 0.78), bw * 0.4, red ? const Color(0xFFE8202A) : const Color(0xFF15181C), w: FontWeight.w900);
+      }
+    }
+    _dtxt(cv, 'x1000', _polar(tc, 62, tr - bw * 1.5), tr * 0.065, Colors.white54, w: FontWeight.w700);
+    _dtxt(cv, 'RPM', _polar(tc, 62, tr - bw * 1.5) + Offset(0, tr * 0.075), tr * 0.065, Colors.white54, w: FontWeight.w700);
+    _dtxt(cv, 'TIWSHOP', tc + Offset(0, -tr * 0.55), tr * 0.1, c, family: kFont, italic: false);
+    // เกจย่อย
+    _arcGauge(cv, g.tempC, g.gr, '40', '150', 'TEMP', '°C');
+    _arcGauge(cv, g.tpsC, g.gr, '0', '100', 'TPS', '');
+    _arcGauge(cv, g.mapC, g.gr, '0', '120', 'MAP', 'kPa');
+    // AFR: วงขาว + จานดำ
+    cv.drawCircle(g.afrC, g.ar - g.ar * 0.09, Paint()..style = PaintingStyle.stroke..strokeWidth = (g.ar * 0.18)..color = const Color(0xFFE9ECEF));
+    cv.drawCircle(g.afrC, g.ar * 0.82, Paint()..color = Colors.black);
+    // กล่อง TOPSPEED
+    final rr = RRect.fromRectAndRadius(g.top, const Radius.circular(8));
+    cv.drawRRect(rr, Paint()..color = const Color(0xFF2B3036));
+    cv.drawRRect(rr, Paint()..style = PaintingStyle.stroke..strokeWidth = (1)..color = Colors.white24);
+  }
+
+  @override
+  bool shouldRepaint(_DashStatic o) => o.c != c || o.shift != shift;
+}
+
+// ---- ชั้นค่าสด ----
+class _DashLive extends CustomPainter {
+  final Color c;
+  final int shift, tempWarn;
+  final double? rpm, speed, temp, tps, map, afr;
+  final double top;
+  final DateTime now;
+  _DashLive({required this.c, required this.shift, required this.tempWarn, this.rpm, this.speed, this.temp, this.tps, this.map, this.afr,
+      required this.top, required this.now});
+
+  void _val(Canvas cv, Offset ctr, double r, double? v, double lo, double hi, Color col, int dec) {
+    final sw = r * 0.26, rr = r - sw / 2;
+    if (v != null) {
+      final double f = ((v - lo) / (hi - lo)).clamp(0.0, 1.0).toDouble();
+      if (f > 0) {
+        cv.drawArc(Rect.fromCircle(center: ctr, radius: rr), _rad(135), _rad(270 * f), false,
+            Paint()..style = PaintingStyle.stroke..strokeWidth = (sw * 0.72)..color = col);
+      }
+    }
+    _dtxt(cv, v == null ? '--' : v.toStringAsFixed(dec), ctr + Offset(0, -r * 0.08), r * 0.44, Colors.white, w: FontWeight.w900);
+  }
+
+  @override
+  void paint(Canvas cv, Size s) {
+    final g = _DashGeo(s);
+    final rmax = _dashRmax(shift);
+    final tc = g.tc, tr = g.tr, bw = tr * 0.2;
+    // แถบรอบเครื่อง (ขอบในของวงขาว) + เข็มสามเหลี่ยมแดง
+    final double rv = (rpm ?? 0.0).clamp(0.0, rmax.toDouble()).toDouble();
+    final f = rv / rmax;
+    if (f > 0) {
+      cv.drawArc(Rect.fromCircle(center: tc, radius: tr - bw - 4), _rad(135), _rad(270 * f), false,
+          Paint()..style = PaintingStyle.stroke..strokeWidth = (5)..strokeCap = StrokeCap.round..color = rv >= shift ? const Color(0xFFFF2A2A) : c);
+    }
+    final a = 135 + 270 * f;
+    final tip = _polar(tc, a, tr - bw * 0.04);
+    final p = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(_polar(tc, a - 3.4, tr - bw * 1.08).dx, _polar(tc, a - 3.4, tr - bw * 1.08).dy)
+      ..lineTo(_polar(tc, a + 3.4, tr - bw * 1.08).dx, _polar(tc, a + 3.4, tr - bw * 1.08).dy)
+      ..close();
+    cv.drawPath(p, Paint()..color = const Color(0xFFFF1E1E));
+    // ความเร็ว + RPM + เวลา
+    _dtxt(cv, speed == null ? '--' : speed!.toStringAsFixed(0), tc + Offset(0, -tr * 0.2), tr * 0.42, Colors.white, w: FontWeight.w900);
+    _dtxt(cv, 'km/h', tc + Offset(0, tr * 0.05), tr * 0.1, Colors.white70, w: FontWeight.w700);
+    cv.drawLine(tc + Offset(-tr * 0.45, tr * 0.14), tc + Offset(tr * 0.45, tr * 0.14), Paint()..strokeWidth = (2)..color = Colors.white70);
+    _dtxt(cv, rpm == null ? '--' : rpm!.toStringAsFixed(0), tc + Offset(-tr * 0.08, tr * 0.27), tr * 0.16,
+        rv >= shift ? const Color(0xFFFF2A2A) : Colors.white, w: FontWeight.w900);
+    _dtxt(cv, 'RPM', tc + Offset(tr * 0.3, tr * 0.29), tr * 0.075, Colors.white60, w: FontWeight.w700);
+    _dtxt(cv, _hm(now), tc + Offset(0, tr * 0.45), tr * 0.095, Colors.white, w: FontWeight.w800);
+    _dtxt(cv, _dmy(now), tc + Offset(0, tr * 0.59), tr * 0.075, Colors.white70, w: FontWeight.w700);
+    // เกจย่อย
+    final tCol = temp != null && temp! >= tempWarn ? const Color(0xFFFF2A2A) : const Color(0xFF2A6BFF);
+    _val(cv, g.tempC, g.gr, temp, 40, 150, tCol, 0);
+    _val(cv, g.tpsC, g.gr, tps, 0, 100, const Color(0xFFFFE01A), 0);
+    _val(cv, g.mapC, g.gr, map, 0, 120, c, 0);
+    // AFR
+    final aCol = afr == null ? Colors.white : (afr! < 13.0 ? const Color(0xFF3AA0FF) : (afr! > 15.0 ? const Color(0xFFFF8A1E) : const Color(0xFF5CFF2E)));
+    _dtxt(cv, 'AFR', g.afrC + Offset(0, -g.ar * 0.32), g.ar * 0.3, const Color(0xFFFFE01A), w: FontWeight.w900);
+    _dtxt(cv, afr == null ? '--' : afr!.toStringAsFixed(1), g.afrC + Offset(0, g.ar * 0.17), g.ar * 0.44, aCol, w: FontWeight.w900);
+    // TOPSPEED
+    _dtxt(cv, 'TOPSPEED', Offset(g.top.center.dx, g.top.top + g.top.height * 0.26), g.top.height * 0.24, const Color(0xFFFFE01A), w: FontWeight.w900);
+    _dtxt(cv, top.toStringAsFixed(0), Offset(g.top.center.dx, g.top.top + g.top.height * 0.68), g.top.height * 0.42, Colors.white, w: FontWeight.w900);
+  }
+
+  @override
+  bool shouldRepaint(_DashLive o) => true;
+}
+
+class DashPage extends StatelessWidget {
+  final GaugeController c;
+  const DashPage({super.key, required this.c});
+
+  static String _f(double? v, int dec) => v == null ? '--' : v.toStringAsFixed(dec);
+
+  @override
+  Widget build(BuildContext context) {
+    final cfg = Cfg.i;
+    final th = cfg.t;
+    final t = c.t;
+    final live = c.demo || c.ecuLive;
+    double? v(double? x) => live ? x : null;
+    final rows = <List<String>>[
+      ['INJ', 'ms', _f(v(t.inj), 2)],
+      ['IGN', 'deg', _f(v(t.ign), 1)],
+      ['IAT', '°C', _f(v(t.iat), 0)],
+      ['BATT', 'V', _f(v(t.batt), 1)],
+      ['O2', 'V', _f(v(t.o2v), 2)],
+      ['STFT', '%', _f(v(t.stft == null ? null : (t.stft! - 1) * 100), 1)],
+      ['LTFT', '%', _f(v(t.ltft == null ? null : (t.ltft! - 1) * 100), 1)],
+    ];
+    return LayoutBuilder(builder: (_, cs) {
+      final listW = (cs.maxWidth * 0.2).clamp(120.0, 190.0).toDouble();
+      return Row(children: [
+        Expanded(
+          child: Stack(fit: StackFit.expand, children: [
+            RepaintBoundary(child: CustomPaint(painter: _DashStatic(th.c, cfg.shift))),
+            CustomPaint(
+              painter: _DashLive(
+                c: th.c, shift: cfg.shift, tempWarn: cfg.tempWarn,
+                rpm: v(t.rpm), speed: c.shownSpeed, temp: v(t.ect ?? t.eot), tps: v(t.tps), map: v(t.map), afr: v(t.afr),
+                top: c.topSpeed, now: DateTime.now(),
+              ),
+            ),
+          ]),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: listW,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10), border: Border.all(color: th.c.withOpacity(0.6))),
+            child: Column(children: [
+              for (int i = 0; i < rows.length; i++)
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(border: i == rows.length - 1 ? null : const Border(bottom: BorderSide(color: Colors.white12))),
+                    child: Row(children: [
+                      Text(rows[i][0], style: const TextStyle(color: Color(0xFFFFE01A), fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, fontSize: 14)),
+                      const SizedBox(width: 3),
+                      Text(rows[i][1], style: const TextStyle(color: Colors.white54, fontSize: 9)),
+                      const Spacer(),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(rows[i][2], style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, fontSize: 20)),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ),
+            ]),
+          ),
+        ),
+      ]);
+    });
+  }
+}
+
+// ---- วงความเร็วด้านหลังตัวเลข TOP SPEED ----
+class _TsArcPainter extends CustomPainter {
+  final double? now;
+  final double best;
+  final Color c;
+  _TsArcPainter(this.now, this.best, this.c);
+  @override
+  void paint(Canvas cv, Size s) {
+    final ctr = Offset(s.width / 2, s.height * 0.56);
+    final r = math.min(s.width * 0.42, s.height * 0.5);
+    final scale = best > 180 || (now ?? 0) > 180 ? 300.0 : 200.0;
+    final rect = Rect.fromCircle(center: ctr, radius: r);
+    cv.drawArc(rect, _rad(150), _rad(240), false, Paint()..style = PaintingStyle.stroke..strokeWidth = (10)..strokeCap = StrokeCap.round..color = Colors.white12);
+    final double f = ((now ?? 0.0) / scale).clamp(0.0, 1.0).toDouble();
+    if (f > 0) {
+      cv.drawArc(rect, _rad(150), _rad(240 * f), false, Paint()..style = PaintingStyle.stroke..strokeWidth = (10)..strokeCap = StrokeCap.round..color = c);
+    }
+    if (best > 0) {
+      final double a = 150 + 240 * (best / scale).clamp(0.0, 1.0).toDouble();
+      cv.drawLine(_polar(ctr, a, r - 12), _polar(ctr, a, r + 12), Paint()..strokeWidth = (4)..strokeCap = StrokeCap.round..color = const Color(0xFFFFE01A));
+    }
+    for (int k = 0; k <= scale; k += 50) {
+      final double a = 150 + 240 * k / scale;
+      _dtxt(cv, '$k', _polar(ctr, a, r + 22), 11, Colors.white54, w: FontWeight.w700, italic: false);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TsArcPainter o) => o.now != now || o.best != best || o.c != c;
+}
+
+class TopSpeedPage extends StatelessWidget {
+  final GaugeController c;
+  const TopSpeedPage({super.key, required this.c});
+
+  Widget _box(String label, String value, AppTheme th) => Container(
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white24), color: const Color(0xCC0A0D14)),
+        clipBehavior: Clip.antiAlias,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(
+            color: const Color(0xFFCFD3D9),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            child: Text(label, style: const TextStyle(color: Color(0xFF3A3F46), fontWeight: FontWeight.w800, fontSize: 12)),
+          ),
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, fontSize: 34)),
+                ),
+              ),
+            ),
+          ),
+        ]),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Cfg.i.t;
+    final at = c.tsAt;
+    final now = c.tsNow;
+    final best = c.tsBest;
+    return LayoutBuilder(builder: (_, cs) {
+      final side = (cs.maxWidth * 0.21).clamp(120.0, 200.0).toDouble();
+      return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SizedBox(
+          width: side,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            SizedBox(
+              height: 42,
+              child: InkWell(
+                onTap: c.tsClear,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  decoration: BoxDecoration(color: const Color(0xFF5A5F66), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white30)),
+                  child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.refresh, size: 18, color: Colors.white),
+                    SizedBox(width: 6),
+                    Text('CLEAR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
+                  ]),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(child: _box('RPM', c.tsRpm == null ? '--' : c.tsRpm!.toStringAsFixed(0), th)),
+            const SizedBox(height: 8),
+            Expanded(child: _box('AFR', c.tsAfr == null ? '--' : c.tsAfr!.toStringAsFixed(1), th)),
+          ]),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: th.c, width: 1.5),
+              gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [th.c.withOpacity(0.35), const Color(0xEE0B0F1A)]),
+            ),
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+            child: Column(children: [
+              const FittedBox(fit: BoxFit.scaleDown, child: Text('TOP SPEED', style: TextStyle(fontFamily: kFont, fontSize: 28, color: Colors.white))),
+              const SizedBox(height: 2),
+              Text('TIWSHOP GPS SPEED METER', style: TextStyle(fontFamily: kFont, fontSize: 9, color: th.c)),
+              Expanded(
+                child: Stack(fit: StackFit.expand, children: [
+                  CustomPaint(painter: _TsArcPainter(now, best, th.c)),
+                  Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(best > 0 ? best.toStringAsFixed(0) : '--',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, fontSize: 96, height: 1.0)),
+                      ),
+                    ),
+                    const Text('km/h', style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w700)),
+                  ]),
+                ]),
+              ),
+            ]),
+          ),
+        ),
+        const SizedBox(width: 10),
+        SizedBox(
+          width: side,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Expanded(child: _box('TIME', at == null ? '--' : _hms(at), th)),
+            const SizedBox(height: 8),
+            Expanded(child: _box('DATE', at == null ? '--' : _dmy(at), th)),
+            const SizedBox(height: 8),
+            Expanded(child: _box('NOW (${c.tsSrc})', now == null ? '--' : now.toStringAsFixed(0), th)),
+          ]),
+        ),
+      ]);
+    });
+  }
 }
