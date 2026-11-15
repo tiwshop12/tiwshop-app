@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatf
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart' show getApplicationDocumentsDirectory;
@@ -20,6 +21,7 @@ final Guid kSvc = Guid('7a0f0001-5a41-5201-9c11-2a52a1c0de01');
 final Guid kData = Guid('7a0f0002-5a41-5201-9c11-2a52a1c0de01');
 final Guid kCmd = Guid('7a0f0003-5a41-5201-9c11-2a52a1c0de01');
 final Guid kImg = Guid('7a0f0004-5a41-5201-9c11-2a52a1c0de01');
+final Guid kFile = Guid('7a0f0005-5a41-5201-9c11-2a52a1c0de01'); // ส่งไฟล์ .bin ไปเขียนกล่อง ECU
 
 const kFont = 'Ethnocentric';
 const kGreen = Color(0xFF3CFF8A);
@@ -67,7 +69,7 @@ const kBgs = <BgOpt>[
 ];
 
 // เวอร์ชันเฟิร์มแวร์ที่แอพรุ่นนี้ออกแบบมาให้ใช้คู่กัน (แสดงเทียบในหน้า SETTING)
-const kAppFw = '1.0.0';
+const kAppFw = '1.3.0';
 
 // ---------- ค่าคีย์ที่แสดงได้ (เหมือน TEST1 + TOP SPD) ----------
 const int kTps = 0, kTemp = 1, kBatt = 2, kAfr = 3, kInj = 4, kIgn = 5, kRpm = 6, kMap = 7,
@@ -262,12 +264,16 @@ class Telemetry {
   final bool dtcSup, dtcValid;
   final int dtcClear;
   final List<List<int>> dtcCur, dtcSto; // [code, sub]
+  // เขียนไฟล์ ECU (FW 1.3.0, ไบต์ 75..78): flashState 0 ว่าง..7, flashPct, flashVendorDet 1 Keihin 2 Shin, fileRx 0 ว่าง 1 รับ 2 สำเร็จ 3 ผิด
+  final int flashState, flashPct, flashVendor, fileRx;
+  final bool flashSup; // เฟิร์มแวร์รองรับการเขียนไฟล์ (แพ็กเกจยาว >= 79 ไบต์)
   Telemetry({
     this.fresh = false, this.state = 0, this.proto = 0, this.bike = 0, this.img = 0,
     this.rpm, this.speed, this.ect, this.iat, this.eot, this.tps, this.map,
     this.batt, this.afr, this.ign, this.inj, this.o2v, this.stft, this.ltft,
     this.fwMaj, this.fwMin, this.fwPatch,
     this.dtcSup = false, this.dtcValid = false, this.dtcClear = 0, this.dtcCur = const [], this.dtcSto = const [],
+    this.flashState = 0, this.flashPct = 0, this.flashVendor = 0, this.fileRx = 0, this.flashSup = false,
   });
   String? get fwText => fwMaj == null ? null : '$fwMaj.$fwMin.$fwPatch';
 
@@ -294,6 +300,11 @@ class Telemetry {
       fwMaj: b.length >= 75 ? b[72] : null,
       fwMin: b.length >= 75 ? b[73] : null,
       fwPatch: b.length >= 75 ? b[74] : null,
+      flashSup: b.length >= 79,
+      flashState: b.length >= 79 ? b[75] : 0,
+      flashPct: b.length >= 79 ? b[76] : 0,
+      flashVendor: b.length >= 79 ? b[77] : 0,
+      fileRx: b.length >= 79 ? b[78] : 0,
     );
   }
 }
@@ -336,7 +347,8 @@ class GaugeController extends ChangeNotifier {
   String? error;
 
   BluetoothDevice? _dev;
-  BluetoothCharacteristic? _cmd, _imgCh;
+  BluetoothCharacteristic? _cmd, _imgCh, _fileCh;
+  bool _fileBusy = false;
   StreamSubscription? _scanSub, _dataSub, _connSub, _gpsSub, _gnssSub;
   static const EventChannel _gnss = EventChannel('mfb/gnss'); // จำนวนดาวเทียมจริงจาก Android (MainActivity.kt ที่ workflow เติมให้)
   Timer? _demoTimer, _retryTimer, _gpsWatch;
@@ -805,8 +817,10 @@ class GaugeController extends ChangeNotifier {
       final data = svc.characteristics.firstWhere((c) => c.uuid == kData);
       _cmd = svc.characteristics.firstWhere((c) => c.uuid == kCmd);
       _imgCh = null;
+      _fileCh = null;
       for (final c in svc.characteristics) {
         if (c.uuid == kImg) _imgCh = c;
+        if (c.uuid == kFile) _fileCh = c;
       }
       await data.setNotifyValue(true);
       await _dataSub?.cancel();
@@ -953,6 +967,105 @@ class GaugeController extends ChangeNotifier {
     } catch (e) {
       return 'ส่งคำสั่งไม่สำเร็จ: $e';
     }
+  }
+
+  // ===================== เขียนไฟล์ ECU (คลังไฟล์ + ส่งไป + สั่งเขียน) =====================
+  bool get flashSupported => t.flashSup;
+  bool get fileBusy => _fileBusy;
+  bool get flashBusy => t.flashState >= 1 && t.flashState <= 5; // INIT..VERIFY
+
+  /// ส่งไฟล์ .bin ไปเก็บในเกจ (ช่อง FILE) — name ส่งไปด้วยเพื่อให้เกจแสดงชื่อไฟล์
+  Future<String?> sendBinFile(Uint8List data, String name, void Function(double) onProgress) async {
+    final ch = _fileCh;
+    if (ch == null || link != LinkState.connected || _dev == null) {
+      return 'เฟิร์มแวร์เกจยังไม่รองรับการเขียนไฟล์ (ต้อง FW 1.3.0 ขึ้นไป)';
+    }
+    if (_fileBusy) return 'กำลังส่งไฟล์อยู่';
+    _fileBusy = true;
+    try {
+      final chunk = (_dev!.mtuNow - 4).clamp(16, 200).toInt();
+      final n = data.length;
+      final nb = name.codeUnits.take(24).toList();
+      await ch.write([1, n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255, ...nb]);
+      int sum = 0;
+      for (int off = 0; off < n; off += chunk) {
+        final end = math.min(n, off + chunk);
+        final part = data.sublist(off, end);
+        for (final b in part) {
+          sum = (sum + b) & 0xFFFF;
+        }
+        await ch.write([2, ...part], withoutResponse: false);
+        onProgress(end / n);
+      }
+      await ch.write([3, sum & 255, (sum >> 8) & 255]);
+      for (int i = 0; i < 60; i++) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        if (t.fileRx == 2) return null;
+        if (t.fileRx == 3) return 'เกจรับไฟล์ไม่สำเร็จ ลองส่งใหม่';
+      }
+      return 'ไม่ได้รับการยืนยันจากเกจ';
+    } catch (e) {
+      return 'ส่งไม่สำเร็จ: $e';
+    } finally {
+      _fileBusy = false;
+    }
+  }
+
+  Future<String?> deleteGaugeBin() async {
+    final ch = _fileCh;
+    if (ch == null || link != LinkState.connected) return 'ยังไม่ได้เชื่อมต่อเกจ';
+    try {
+      await ch.write([4]);
+      return null;
+    } catch (e) {
+      return 'ส่งคำสั่งไม่สำเร็จ: $e';
+    }
+  }
+
+  /// สั่งเกจเริ่มเขียนไฟล์ลงกล่อง (vendor 0 อัตโนมัติ, 1 Keihin, 2 Shindengen)
+  Future<String?> startFlash(int vendor) async {
+    final ch = _fileCh;
+    if (ch == null || link != LinkState.connected) return 'ยังไม่ได้เชื่อมต่อเกจ';
+    try {
+      await ch.write([5, vendor & 0xFF]);
+      return null;
+    } catch (e) {
+      return 'ส่งคำสั่งไม่สำเร็จ: $e';
+    }
+  }
+
+  // ----- คลังไฟล์ในเครื่อง (เก็บ .bin ไว้ส่งซ้ำได้) -----
+  Future<io.Directory> _binsDir() async {
+    final base = await getApplicationDocumentsDirectory();
+    final d = io.Directory('${base.path}/bins');
+    if (!await d.exists()) await d.create(recursive: true);
+    return d;
+  }
+
+  Future<List<io.File>> listBins() async {
+    try {
+      final d = await _binsDir();
+      final l = (await d.list().toList()).whereType<io.File>().where((f) => f.path.toLowerCase().endsWith('.bin')).toList();
+      l.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
+      return l;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<io.File> importBinBytes(String name, Uint8List bytes) async {
+    final d = await _binsDir();
+    var safe = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    if (!safe.toLowerCase().endsWith('.bin')) safe = '$safe.bin';
+    final f = io.File('${d.path}/$safe');
+    await f.writeAsBytes(bytes, flush: true);
+    return f;
+  }
+
+  Future<void> deleteBinFile(io.File f) async {
+    try {
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
   }
 
   // ----- DEMO: จำลองการขี่ครบทุกค่า -----
@@ -2870,6 +2983,18 @@ class _SettingsPageState extends State<SettingsPage> {
                             ]);
                           }),
                         ),
+                        const SizedBox(height: 12),
+                        _panel(
+                          th,
+                          'เขียนไฟล์ ECU',
+                          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            const Text('ส่งไฟล์ .bin ไปที่เกจ แล้วเขียนลงกล่อง (Keihin / Shindengen) มีคลังเก็บไฟล์ในแอพ',
+                                style: TextStyle(color: Colors.white70, fontSize: 11)),
+                            const SizedBox(height: 10),
+                            _action('คลังไฟล์ / เขียนกล่อง', Icons.sd_storage, th,
+                                () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FlashPage(c: widget.c)))),
+                          ]),
+                        ),
                       ]),
                     ),
                     const SizedBox(width: 12),
@@ -3577,4 +3702,288 @@ class _AfrPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_AfrPainter o) => true;
+}
+
+// ===================== หน้า: คลังไฟล์ + เขียนไฟล์ ECU =====================
+class FlashPage extends StatefulWidget {
+  final GaugeController c;
+  const FlashPage({super.key, required this.c});
+  @override
+  State<FlashPage> createState() => _FlashPageState();
+}
+
+class _FlashPageState extends State<FlashPage> {
+  List<io.File> files = [];
+  bool loading = true, sending = false;
+  double? sendProg;
+  String? sentName; // ชื่อไฟล์ที่เพิ่งส่งไปเกจสำเร็จล่าสุด
+  int vendor = 0; // 0 อัตโนมัติ, 1 Keihin, 2 Shindengen
+  String? msg;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final l = await widget.c.listBins();
+    if (!mounted) return;
+    setState(() { files = l; loading = false; });
+  }
+
+  Future<void> _import() async {
+    try {
+      final res = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
+      if (res == null || res.files.isEmpty) return;
+      final f = res.files.first;
+      Uint8List? bytes = f.bytes;
+      bytes ??= (f.path != null) ? await io.File(f.path!).readAsBytes() : null;
+      if (bytes == null) { setState(() => msg = 'อ่านไฟล์ไม่ได้'); return; }
+      if (bytes.length < 1024 || bytes.length > 700000) { setState(() => msg = 'ขนาดไฟล์ไม่ถูกต้อง (ต้อง 1KB–700KB)'); return; }
+      await widget.c.importBinBytes(f.name, bytes);
+      setState(() => msg = 'เพิ่มไฟล์ ${f.name} แล้ว');
+      await _load();
+    } catch (e) {
+      setState(() => msg = 'นำเข้าไฟล์ไม่สำเร็จ: $e');
+    }
+  }
+
+  Future<void> _delete(io.File f) async {
+    await widget.c.deleteBinFile(f);
+    await _load();
+  }
+
+  Future<void> _send(io.File f) async {
+    if (sending) return;
+    final connected = widget.c.link == LinkState.connected;
+    if (!connected) { setState(() => msg = 'ยังไม่ได้เชื่อมต่อเกจ'); return; }
+    if (!widget.c.flashSupported) { setState(() => msg = 'เฟิร์มแวร์เกจยังไม่รองรับ (ต้อง FW 1.3.0 ขึ้นไป)'); return; }
+    final bytes = await f.readAsBytes();
+    final name = f.path.split('/').last;
+    setState(() { sending = true; sendProg = 0; msg = null; });
+    final err = await widget.c.sendBinFile(bytes, name, (p) {
+      if (mounted) setState(() => sendProg = p);
+    });
+    if (!mounted) return;
+    setState(() {
+      sending = false; sendProg = null;
+      if (err == null) { sentName = name; msg = 'ส่ง $name ไปเกจแล้ว — กดเขียนลงกล่องด้านล่าง'; }
+      else { msg = err; }
+    });
+  }
+
+  Future<void> _flash() async {
+    final connected = widget.c.link == LinkState.connected;
+    if (!connected) { setState(() => msg = 'ยังไม่ได้เชื่อมต่อเกจ'); return; }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        backgroundColor: const Color(0xFF12161C),
+        title: const Text('ยืนยันเขียนไฟล์ลงกล่อง?', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          '⚠️ โหมดนี้ยังไม่ทดสอบกับกล่องจริง เขียนผิดพลาดกล่องพังถาวรได้\n\n'
+          '• ใช้กับกล่องสำรองก่อนเท่านั้น\n• ห้ามดับไฟ/ถอดสายระหว่างเขียน\n• เตรียมเครื่องมือกู้กล่องไว้',
+          style: TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dctx).pop(false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.of(dctx).pop(true), child: const Text('เขียนเลย', style: TextStyle(color: kBad))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final err = await widget.c.startFlash(vendor);
+    if (!mounted) return;
+    setState(() => msg = err ?? 'เริ่มเขียนแล้ว อย่าดับไฟ/ถอดสาย');
+  }
+
+  String _stateText(int s) {
+    switch (s) {
+      case 1: return 'เตรียมเขียน...';
+      case 2: return 'ปลดล็อกกล่อง...';
+      case 3: return 'ลบข้อมูลเก่า...';
+      case 4: return 'กำลังเขียนข้อมูล...';
+      case 5: return 'กำลังตรวจสอบ...';
+      case 6: return 'เขียนสำเร็จ';
+      case 7: return 'เขียนไม่สำเร็จ';
+      default: return '';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final th = Cfg.i.t;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(fit: StackFit.expand, children: [
+        RepaintBoundary(child: _Bg(dim: 0.35, idx: Cfg.i.bgIdx)),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                IconButton(onPressed: () => Navigator.of(context).pop(), icon: Icon(Icons.arrow_back, color: th.c)),
+                Text('เขียนไฟล์ ECU', style: TextStyle(fontFamily: kFont, fontSize: 18, color: th.c)),
+              ]),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    // คำเตือน
+                    FxPanel(col: kBad, strong: true, glow: 0.3, padding: const EdgeInsets.all(12),
+                      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: const [
+                        Icon(Icons.warning_amber_rounded, color: kBad, size: 20),
+                        SizedBox(width: 8),
+                        Expanded(child: Text(
+                          'ยังไม่ทดสอบกับกล่องจริง — เขียนผิดพลาดกล่องพังถาวรได้ ใช้กับกล่องสำรองก่อน และห้ามดับไฟระหว่างเขียน',
+                          style: TextStyle(color: kBad, fontSize: 12.5, fontWeight: FontWeight.w600))),
+                      ])),
+                    const SizedBox(height: 12),
+                    // สถานะการเขียน (live)
+                    AnimatedBuilder(
+                      animation: widget.c,
+                      builder: (_, __) {
+                        final t = widget.c.t;
+                        final connected = widget.c.link == LinkState.connected;
+                        final active = t.flashState >= 1 && t.flashState <= 5;
+                        final done = t.flashState == 6, fail = t.flashState == 7;
+                        return _panel(th, 'สถานะกล่อง', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          _kv('เกจ', connected ? 'เชื่อมต่อแล้ว' : 'ยังไม่ได้เชื่อมต่อ', connected ? kGreen : kAmber),
+                          _kv('รองรับการเขียน', t.flashSup ? 'ใช่ (FW ${t.fwText ?? "?"})' : 'ไม่ (เฟิร์มแวร์เก่า)', t.flashSup ? kGreen : kAmber),
+                          _kv('ไฟล์ในเกจ', sentName ?? (t.fileRx == 2 ? 'มีไฟล์พร้อมเขียน' : '—'),
+                              (sentName != null || t.fileRx == 2) ? Colors.white : Colors.white38),
+                          if (active || done || fail) ...[
+                            const SizedBox(height: 10),
+                            Text(_stateText(t.flashState),
+                                style: TextStyle(color: done ? kGreen : fail ? kBad : th.c, fontWeight: FontWeight.bold, fontSize: 15)),
+                            if (active) ...[
+                              const SizedBox(height: 8),
+                              ClipRRect(borderRadius: BorderRadius.circular(6),
+                                child: LinearProgressIndicator(value: t.flashPct / 100.0, minHeight: 10,
+                                  backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation(th.c))),
+                              const SizedBox(height: 4),
+                              Text('${t.flashPct}%  — อย่าดับไฟ/ถอดสาย', style: const TextStyle(color: kAmber, fontSize: 11)),
+                            ],
+                            if (fail) const Padding(padding: EdgeInsets.only(top: 4),
+                              child: Text('ห้ามดับไฟ ต่อสายไว้แล้วลองเขียนใหม่', style: TextStyle(color: kAmber, fontSize: 11))),
+                            if (done) const Padding(padding: EdgeInsets.only(top: 4),
+                              child: Text('ดับกุญแจ รอ 5 วินาที แล้วสตาร์ทใหม่', style: TextStyle(color: Colors.white54, fontSize: 11))),
+                          ],
+                        ]));
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    // เลือกชนิดกล่อง + ปุ่มเขียน
+                    _panel(th, 'เขียนลงกล่อง', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text('ชนิดกล่อง', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      const SizedBox(height: 8),
+                      Wrap(spacing: 8, children: [
+                        for (final v in const [[0, 'อัตโนมัติ'], [1, 'Keihin'], [2, 'Shindengen']])
+                          ChoiceChip(
+                            label: Text(v[1] as String),
+                            selected: vendor == v[0],
+                            onSelected: (_) => setState(() => vendor = v[0] as int),
+                            selectedColor: th.c.withOpacity(0.3),
+                            backgroundColor: Colors.black38,
+                            labelStyle: TextStyle(color: vendor == v[0] ? th.c : Colors.white70, fontSize: 12),
+                          ),
+                      ]),
+                      const SizedBox(height: 12),
+                      AnimatedBuilder(
+                        animation: widget.c,
+                        builder: (_, __) {
+                          final canFlash = widget.c.link == LinkState.connected && widget.c.flashSupported && !widget.c.flashBusy && (sentName != null || widget.c.t.fileRx == 2);
+                          return _action('เขียนลงกล่อง', Icons.save_alt, kAmber, _flash, enabled: canFlash);
+                        },
+                      ),
+                    ])),
+                    const SizedBox(height: 12),
+                    // คลังไฟล์
+                    _panel(th, 'คลังไฟล์ (.bin)', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Row(children: [
+                        _action('นำเข้าไฟล์', Icons.add, th.c, _import),
+                        const Spacer(),
+                        Text('${files.length} ไฟล์', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                      ]),
+                      const SizedBox(height: 10),
+                      if (loading) const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
+                      else if (files.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text('ยังไม่มีไฟล์ กด "นำเข้าไฟล์" เพื่อเพิ่มไฟล์ .bin', style: TextStyle(color: Colors.white38, fontSize: 12)))
+                      else
+                        for (final f in files) _fileRow(th, f),
+                    ])),
+                    if (msg != null) Padding(padding: const EdgeInsets.only(top: 12),
+                      child: Text(msg!, style: TextStyle(color: th.c, fontSize: 12))),
+                    if (sending) Padding(padding: const EdgeInsets.only(top: 12), child: Column(children: [
+                      Text('กำลังส่งไฟล์ไปเกจ ${((sendProg ?? 0) * 100).toInt()}%', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      const SizedBox(height: 6),
+                      ClipRRect(borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(value: sendProg, minHeight: 8, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation(th.c))),
+                    ])),
+                    const SizedBox(height: 24),
+                  ]),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _fileRow(AppTheme th, io.File f) {
+    final name = f.path.split('/').last;
+    final kb = (f.lengthSync() / 1024).toStringAsFixed(0);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(color: Colors.black38, border: Border.all(color: th.c.withOpacity(0.5)), borderRadius: BorderRadius.circular(8)),
+      child: Row(children: [
+        Icon(Icons.description, color: th.c, size: 18),
+        const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(name, style: const TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis),
+          Text('$kb KB', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+        ])),
+        IconButton(onPressed: sending ? null : () => _send(f), icon: Icon(Icons.upload, color: th.c, size: 20), tooltip: 'ส่งไปเกจ'),
+        IconButton(onPressed: sending ? null : () => _delete(f), icon: const Icon(Icons.delete_outline, color: kBad, size: 20), tooltip: 'ลบ'),
+      ]),
+    );
+  }
+
+  Widget _panel(AppTheme th, String title, Widget child) => Padding(
+        padding: const EdgeInsets.only(bottom: 0),
+        child: FxPanel(col: th.c, glow: 0.3, padding: const EdgeInsets.all(12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 12),
+            child,
+          ])),
+      );
+
+  Widget _kv(String k, String v, Color col) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(children: [
+          Text(k, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          const Spacer(),
+          Flexible(child: Text(v, style: TextStyle(color: col, fontSize: 12.5, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+        ]),
+      );
+
+  Widget _action(String s, IconData ic, Color col, VoidCallback f, {bool enabled = true}) => Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: InkWell(
+          onTap: enabled ? f : null,
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(color: Colors.black45, border: Border.all(color: col, width: 1.3), borderRadius: BorderRadius.circular(6)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(ic, size: 16, color: col),
+              const SizedBox(width: 6),
+              Text(s, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            ]),
+          ),
+        ),
+      );
 }
