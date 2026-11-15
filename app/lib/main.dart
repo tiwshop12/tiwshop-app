@@ -2009,11 +2009,17 @@ class _GaugePageState extends State<GaugePage> {
     final tileW = math.min(math.max(r * 1.5, 150.0), 230.0);
 
     return Stack(children: [
+      // TIWSHOP: หน้าปัด/ขีด/ตัวเลข วาดครั้งเดียวเก็บเป็นเลเยอร์ (เดิมวาดใหม่ทุกเฟรม + เบลอ 44 แท่ง = กระตุก)
       Positioned.fill(
-        child: TweenAnimationBuilder<double>(
-          tween: Tween<double>(end: frac),
-          duration: const Duration(milliseconds: 140),
-          builder: (_, v, __) => CustomPaint(painter: GaugePainter(frac: v, r: r, th: th, shift: cfg.shift)),
+        child: RepaintBoundary(child: CustomPaint(painter: GaugeDialPainter(r: r, th: th, shift: cfg.shift))),
+      ),
+      Positioned.fill(
+        child: RepaintBoundary(
+          child: TweenAnimationBuilder<double>(
+            tween: Tween<double>(end: frac),
+            duration: const Duration(milliseconds: 140),
+            builder: (_, v, __) => CustomPaint(painter: GaugePainter(frac: v, r: r, th: th, shift: cfg.shift)),
+          ),
         ),
       ),
       Positioned(
@@ -2028,8 +2034,7 @@ class _GaugePageState extends State<GaugePage> {
                 child: Text(sp == null ? '--' : sp.toStringAsFixed(0),
                     style: TextStyle(fontFamily: kFont, fontSize: 60, color: Colors.white, shadows: [
                       Shadow(color: Color.lerp(th.c, Colors.black, 0.55)!, offset: const Offset(2.5, 2.5)),
-                      Shadow(color: th.c, blurRadius: 14),
-                      Shadow(color: th.c.withOpacity(0.7), blurRadius: 4),
+                      Shadow(color: th.c.withOpacity(0.9), blurRadius: 10),
                     ])),
               ),
             ),
@@ -2296,6 +2301,15 @@ class _SegBarPainter extends CustomPainter {
   void paint(Canvas canvas, Size s) {
     final sk = s.height * 0.32, gap = 2.0;
     final sw = (s.width - sk * 2 + gap) / n - gap;
+    // TIWSHOP: แสงเรืองใต้แท่งที่ติด = เบลอครั้งเดียว (เดิมเบลอทีละแท่ง)
+    final litN = List.generate(n, (i) => (i + 0.5) / n <= frac).where((b) => b).length;
+    if (litN > 0) {
+      final xe = sk + litN * (sw + gap) + sk;
+      canvas.drawRect(Rect.fromLTWH(sk * 0.5, 0, xe - sk * 0.5, s.height), Paint()
+        ..shader = LinearGradient(colors: [color(0.0).withOpacity(0.7), color(litN / n).withOpacity(0.7)])
+            .createShader(Rect.fromLTWH(0, 0, xe, s.height))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
+    }
     for (int i = 0; i < n; i++) {
       final pos = (i + 0.5) / n;
       final lit = pos <= frac;
@@ -2311,9 +2325,6 @@ class _SegBarPainter extends CustomPainter {
         canvas.drawPath(p, Paint()..color = const Color(0xFF262A36));
         continue;
       }
-      canvas.drawPath(p, Paint()
-        ..color = col.withOpacity(0.7)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
       canvas.drawPath(p, Paint()..color = col);
       final hy = s.height * 0.42;
       final g = Path()
@@ -2327,7 +2338,7 @@ class _SegBarPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SegBarPainter o) => o.frac != frac || o.n != n || o.color != color;
+  bool shouldRepaint(_SegBarPainter o) => o.frac != frac || o.n != n || o.color(0.0) != color(0.0) || o.color(1.0) != color(1.0);   // สีเป็นฟังก์ชันที่สร้างใหม่ทุกรอบ -> เทียบสีจริงแทน
 }
 
 // ---------- กรอบแสดงค่า ----------
@@ -2382,8 +2393,7 @@ class StatTile extends StatelessWidget {
                   child: Text(value,
                       style: TextStyle(fontFamily: kFont, fontSize: valueSize, color: vcol, shadows: [
                         Shadow(color: Color.lerp(glow, Colors.black, 0.55)!, offset: const Offset(1.5, 1.5)),
-                        Shadow(color: glow, blurRadius: 10),
-                        Shadow(color: glow.withOpacity(0.6), blurRadius: 3),
+                        Shadow(color: glow.withOpacity(0.8), blurRadius: 6),
                       ])),
                 ),
               ),
@@ -2413,19 +2423,22 @@ class StatTile extends StatelessWidget {
 /// จุดศูนย์กลางเกจ (แนวตั้ง) ในกล่องเกจ: ใช้ร่วมกันทั้ง _center / GaugePainter
 double gaugeCy(double r) => r * 1.1 + 2;
 
-// ---------- เกจ RPM: หน้าปัดมืด + ขอบโลหะ + นีออน + แท่งเซกเมนต์ผิวมัน + หัวแท่งขาว + เข็ม + ตัวเลข 0-15 ----------
-class GaugePainter extends CustomPainter {
-  final double frac, r;
+// ---------- เกจ RPM (TIWSHOP: แยก 2 เลเยอร์ให้ลื่น) ----------
+// GaugeDialPainter = ส่วนที่ไม่เปลี่ยน (หน้าปัด ขอบโลหะ นีออน แท่งที่ยังไม่ติด ขีด ตัวเลข) วาดครั้งเดียว แคชใน RepaintBoundary
+// GaugePainter     = ส่วนที่ขยับ (แท่งที่ติด หัวแท่ง เข็ม) ใช้เบลอแค่ 3 ครั้ง/เฟรม (เดิมเบลอทุกแท่ง ~44 ครั้ง + จัดตัวเลข 16 ตัวทุกเฟรม)
+const _gStart = 0.75 * math.pi, _gSweep = 1.5 * math.pi, _gN = 44;
+
+class GaugeDialPainter extends CustomPainter {
+  final double r;
   final AppTheme th;
   final int shift;
-  GaugePainter({required this.frac, required this.r, required this.th, required this.shift});
-
-  static const start = 0.75 * math.pi, sweep = 1.5 * math.pi;
+  GaugeDialPainter({required this.r, required this.th, required this.shift});
 
   @override
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, gaugeCy(r));
     Rect circ(double rr) => Rect.fromCircle(center: c, radius: rr);
+    const start = _gStart, sweep = _gSweep;
 
     // หน้าปัดมืด (ไล่จากกลางสีธีมจาง -> ดำ) + ขอบโลหะ
     canvas.drawCircle(
@@ -2460,57 +2473,22 @@ class GaugePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4);
 
-    // แท่งเซกเมนต์
-    const n = 44;
+    // แท่งเซกเมนต์ที่ยังไม่ติด (ทุกแท่ง - เลเยอร์บนจะทับแท่งที่ติด)
     final thick = r * 0.13;
     final rb = r - thick / 2;
-    final seg = sweep / n;
-    final litN = (frac * n).round();
-    for (int i = 0; i < n; i++) {
-      final pos = (i + 0.5) / n;
+    const seg = sweep / _gN;
+    for (int i = 0; i < _gN; i++) {
+      final pos = (i + 0.5) / _gN;
       final inZone = pos * kMaxRpm >= shift;
-      final lit = i < litN;
       final a0 = start + seg * i + seg * 0.1;
-      final col = rpmColor(pos * kMaxRpm, shift); // เขียว -> เหลือง -> แดง
-      if (lit) {
-        final tip = i == litN - 1;
-        final cc = tip ? const Color(0xFFEBFAFF) : col;
-        canvas.drawArc(circ(rb), a0, seg * 0.8, false, Paint()
-          ..color = cc.withOpacity(0.75)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = thick * 1.3
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
-        canvas.drawArc(circ(rb), a0, seg * 0.8, false, Paint()
-          ..color = cc
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = thick);
-        if (!tip) {
-          canvas.drawArc(circ(r - thick * 0.22), a0, seg * 0.8, false, Paint()
-            ..color = Color.lerp(cc, Colors.white, 0.5)!
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = thick * 0.35);
-          canvas.drawArc(circ(r - thick * 0.86), a0, seg * 0.8, false, Paint()
-            ..color = Color.lerp(cc, Colors.black, 0.3)!
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = thick * 0.22);
-        }
-      } else {
-        canvas.drawArc(circ(rb), a0, seg * 0.8, false, Paint()
-          ..color = inZone ? const Color(0xFF46141A) : const Color(0xFF1C202C)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = thick);
-        canvas.drawArc(circ(r - thick * 0.1), a0, seg * 0.8, false, Paint()
-          ..color = inZone ? const Color(0xFF6E282C) : const Color(0xFF3C4252)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1);
-      }
-    }
-    // แสงวาบที่หัวแท่ง
-    if (litN > 0) {
-      final a = start + seg * (litN - 0.5);
-      canvas.drawCircle(c + Offset(math.cos(a), math.sin(a)) * rb, thick * 0.9, Paint()
-        ..color = const Color(0xFF8CD7FF).withOpacity(0.55)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9));
+      canvas.drawArc(circ(rb), a0, seg * 0.8, false, Paint()
+        ..color = inZone ? const Color(0xFF46141A) : const Color(0xFF1C202C)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = thick);
+      canvas.drawArc(circ(r - thick * 0.1), a0, seg * 0.8, false, Paint()
+        ..color = inZone ? const Color(0xFF6E282C) : const Color(0xFF3C4252)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1);
     }
 
     // วงบางด้านใน + โซนแดงเริ่มที่ SHIFT RPM
@@ -2552,8 +2530,72 @@ class GaugePainter extends CustomPainter {
       final pos = c + dir * (r * 0.64);
       tp.paint(canvas, pos - Offset(tp.width / 2, tp.height / 2));
     }
+    canvas.drawCircle(c, r * 0.30, Paint()
+      ..color = Color.lerp(th.c, Colors.black, 0.3)!
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4);
+  }
 
-    // เข็มทรงสามเหลี่ยม 2 โทน + แสงสีธีม + วงแหวนกลาง
+  @override
+  bool shouldRepaint(GaugeDialPainter o) => o.r != r || o.th != th || o.shift != shift;
+}
+
+class GaugePainter extends CustomPainter {
+  final double frac, r;
+  final AppTheme th;
+  final int shift;
+  GaugePainter({required this.frac, required this.r, required this.th, required this.shift});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, gaugeCy(r));
+    Rect circ(double rr) => Rect.fromCircle(center: c, radius: rr);
+    const start = _gStart, sweep = _gSweep, seg = _gSweep / _gN;
+    final thick = r * 0.13;
+    final rb = r - thick / 2;
+    final litN = (frac * _gN).round();
+
+    if (litN > 0) {
+      // แสงเรืองใต้แท่งที่ติด: เบลอครั้งเดียวทั้งช่วง (สีไล่ตามรอบ)
+      canvas.drawArc(circ(rb), start, seg * litN, false, Paint()
+        ..shader = SweepGradient(
+          endAngle: sweep,
+          colors: [for (int k = 0; k <= 10; k++) rpmColor(k / 10 * kMaxRpm, shift).withOpacity(0.75)],
+          transform: const GradientRotation(start),
+        ).createShader(circ(rb))
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = thick * 1.3
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+    }
+    for (int i = 0; i < litN && i < _gN; i++) {
+      final pos = (i + 0.5) / _gN;
+      final a0 = start + seg * i + seg * 0.1;
+      final tip = i == litN - 1;
+      final cc = tip ? const Color(0xFFEBFAFF) : rpmColor(pos * kMaxRpm, shift);
+      canvas.drawArc(circ(rb), a0, seg * 0.8, false, Paint()
+        ..color = cc
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = thick);
+      if (!tip) {
+        canvas.drawArc(circ(r - thick * 0.22), a0, seg * 0.8, false, Paint()
+          ..color = Color.lerp(cc, Colors.white, 0.5)!
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = thick * 0.35);
+        canvas.drawArc(circ(r - thick * 0.86), a0, seg * 0.8, false, Paint()
+          ..color = Color.lerp(cc, Colors.black, 0.3)!
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = thick * 0.22);
+      }
+    }
+    // แสงวาบที่หัวแท่ง
+    if (litN > 0) {
+      final a = start + seg * (litN - 0.5);
+      canvas.drawCircle(c + Offset(math.cos(a), math.sin(a)) * rb, thick * 0.9, Paint()
+        ..color = const Color(0xFF8CD7FF).withOpacity(0.55)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 9));
+    }
+
+    // เข็มทรงสามเหลี่ยม 2 โทน + แสงสีธีม
     final ang = start + sweep * frac;
     final dir = Offset(math.cos(ang), math.sin(ang)), nrm = Offset(-dir.dy, dir.dx);
     final p1 = c + dir * (r * 0.30), p2 = c + dir * (r * 0.86);
@@ -2566,10 +2608,6 @@ class GaugePainter extends CustomPainter {
         Paint()..color = Colors.white);
     canvas.drawPath(Path()..moveTo((p1 + nrm * 3.2).dx, (p1 + nrm * 3.2).dy)..lineTo(p2.dx, p2.dy)..lineTo(p1.dx, p1.dy)..close(),
         Paint()..color = Color.lerp(th.c, Colors.white, 0.55)!);
-    canvas.drawCircle(c, r * 0.30, Paint()
-      ..color = Color.lerp(th.c, Colors.black, 0.3)!
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4);
   }
 
   @override
