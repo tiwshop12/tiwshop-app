@@ -4255,26 +4255,21 @@ class DashPage extends StatelessWidget {
   }
 }
 
-// ---- วงความเร็วด้านหลังตัวเลข TOP SPEED ----
+// ---- วงความเร็วด้านหลังตัวเลข TOP SPEED (วาดเฉพาะค่าสูงสุดที่บันทึกไว้) ----
 class _TsArcPainter extends CustomPainter {
-  final double? now;
   final double best;
   final Color c;
-  _TsArcPainter(this.now, this.best, this.c);
+  _TsArcPainter(this.best, this.c);
   @override
   void paint(Canvas cv, Size s) {
     final ctr = Offset(s.width / 2, s.height * 0.56);
     final r = math.min(s.width * 0.42, s.height * 0.5);
-    final scale = best > 180 || (now ?? 0) > 180 ? 300.0 : 200.0;
+    final scale = best > 180 ? 300.0 : 200.0;
     final rect = Rect.fromCircle(center: ctr, radius: r);
     cv.drawArc(rect, _rad(150), _rad(240), false, Paint()..style = PaintingStyle.stroke..strokeWidth = (10)..strokeCap = StrokeCap.round..color = Colors.white12);
-    final double f = ((now ?? 0.0) / scale).clamp(0.0, 1.0).toDouble();
+    final double f = (best / scale).clamp(0.0, 1.0).toDouble();
     if (f > 0) {
       cv.drawArc(rect, _rad(150), _rad(240 * f), false, Paint()..style = PaintingStyle.stroke..strokeWidth = (10)..strokeCap = StrokeCap.round..color = c);
-    }
-    if (best > 0) {
-      final double a = 150 + 240 * (best / scale).clamp(0.0, 1.0).toDouble();
-      cv.drawLine(_polar(ctr, a, r - 12), _polar(ctr, a, r + 12), Paint()..strokeWidth = (4)..strokeCap = StrokeCap.round..color = const Color(0xFFFFE01A));
     }
     for (int k = 0; k <= scale; k += 50) {
       final double a = 150 + 240 * k / scale;
@@ -4283,7 +4278,7 @@ class _TsArcPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_TsArcPainter o) => o.now != now || o.best != best || o.c != c;
+  bool shouldRepaint(_TsArcPainter o) => o.best != best || o.c != c;
 }
 
 class TopSpeedPage extends StatelessWidget {
@@ -4317,7 +4312,6 @@ class TopSpeedPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final th = Cfg.i.t;
     final at = c.tsAt;
-    final now = c.tsNow;
     final best = c.tsBest;
     return LayoutBuilder(builder: (_, cs) {
       final side = (cs.maxWidth * 0.21).clamp(120.0, 200.0).toDouble();
@@ -4361,7 +4355,7 @@ class TopSpeedPage extends StatelessWidget {
               Text('TIWSHOP GPS SPEED METER', style: TextStyle(fontFamily: kFont, fontSize: 9, color: th.c)),
               Expanded(
                 child: Stack(fit: StackFit.expand, children: [
-                  CustomPaint(painter: _TsArcPainter(now, best, th.c)),
+                  CustomPaint(painter: _TsArcPainter(best, th.c)),
                   Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                     Flexible(
                       child: FittedBox(
@@ -4384,8 +4378,6 @@ class TopSpeedPage extends StatelessWidget {
             Expanded(child: _box('TIME', at == null ? '--' : _hms(at), th)),
             const SizedBox(height: 8),
             Expanded(child: _box('DATE', at == null ? '--' : _dmy(at), th)),
-            const SizedBox(height: 8),
-            Expanded(child: _box('NOW (${c.tsSrc})', now == null ? '--' : now.toStringAsFixed(0), th)),
           ]),
         ),
       ]);
