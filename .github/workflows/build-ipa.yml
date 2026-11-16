@@ -1,0 +1,71 @@
+name: Build iOS IPA (unsigned)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # สร้างโครง iOS อัตโนมัติ โดยไม่ทับ main.dart / pubspec.yaml ของเรา
+      - name: Generate iOS scaffold
+        run: |
+          cp pubspec.yaml /tmp/pubspec.yaml
+          cp lib/main.dart /tmp/main.dart
+          flutter create . --platforms=ios --project-name gauge --org com.ftp
+          cp /tmp/pubspec.yaml pubspec.yaml
+          cp /tmp/main.dart lib/main.dart
+
+      - name: Set iOS name, permissions, min version
+        run: |
+          P=ios/Runner/Info.plist
+          PB=/usr/libexec/PlistBuddy
+          # ชื่อแอพบนจอ = TIWSHOP
+          $PB -c "Set :CFBundleDisplayName TIWSHOP" "$P" || $PB -c "Add :CFBundleDisplayName string TIWSHOP" "$P"
+          $PB -c "Set :CFBundleName TIWSHOP" "$P" || true
+          add() { $PB -c "Add :$1 string $2" "$P" 2>/dev/null || $PB -c "Set :$1 $2" "$P"; }
+          add NSBluetoothAlwaysUsageDescription "ใช้บลูทูธเพื่อเชื่อมต่อเกจ TIWSHOP"
+          add NSBluetoothPeripheralUsageDescription "ใช้บลูทูธเพื่อเชื่อมต่อเกจ TIWSHOP"
+          add NSLocationWhenInUseUsageDescription "ใช้ตำแหน่ง/GPS เพื่อวัดความเร็วและความเร็วสูงสุด"
+          add NSLocationAlwaysAndWhenInUseUsageDescription "ใช้ตำแหน่ง/GPS เพื่อวัดความเร็วและความเร็วสูงสุด"
+          add NSPhotoLibraryUsageDescription "ใช้รูปจากคลังเพื่อตั้งเป็นโลโก้บนเกจ"
+          # iOS ขั้นต่ำ 13.0 (ให้ปลั๊กอิน BLE/GPS/ไฟล์ ใช้ได้)
+          sed -i '' "s/# platform :ios, '[0-9.]*'/platform :ios, '13.0'/" ios/Podfile || true
+          grep -q "platform :ios" ios/Podfile || echo "platform :ios, '13.0'" | cat - ios/Podfile > /tmp/pf && mv /tmp/pf ios/Podfile
+          plutil -p "$P" | grep -i -E "bundledisplay|bluetooth|location|photo" || true
+
+      - name: Build iOS (no codesign)
+        run: |
+          flutter pub get
+          flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA
+        run: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -R Runner.app Payload/
+          zip -qry /tmp/TIWSHOP.ipa Payload
+          ls -la /tmp/TIWSHOP.ipa
+
+      - name: Publish IPA to Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          V=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          TAG="ios-v${V}-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" /tmp/TIWSHOP.ipa --repo "$GITHUB_REPOSITORY" \
+            --title "TIWSHOP iOS $TAG (unsigned)" \
+            --notes "ไฟล์ .ipa แบบยังไม่เซ็น (unsigned) — ติดตั้งผ่าน Sideloadly / AltStore ด้วย Apple ID ของคุณเอง (เซ็นใหม่ทุก 7 วันถ้าใช้บัญชีฟรี) หรือ TrollStore (เฉพาะ iOS ที่รองรับ)"
