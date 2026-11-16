@@ -3810,11 +3810,13 @@ class _FlashPageState extends State<FlashPage> {
       if (!pf.name.toLowerCase().endsWith('.xdf')) { setState(() => msg = 'กรุณาเลือกไฟล์ .xdf'); return; }
       Uint8List? xb = pf.bytes ?? (pf.path != null ? await io.File(pf.path!).readAsBytes() : null);
       if (xb == null) { setState(() => msg = 'อ่าน XDF ไม่ได้'); return; }
-      // XDF อาจเป็น TIS-620/latin1 ไม่ใช่ UTF-8 — ถอดแบบปลอดภัย
-      String xml;
-      try { xml = const Utf8Decoder(allowMalformed: true).convert(xb); } catch (_) { xml = String.fromCharCodes(xb); }
+      // XDF เก็บเป็น ASCII/TIS-620 ไบต์ — map ไบต์ตรง ๆ เป็นโค้ดพอยต์ (พาร์สด้วย regex ภายหลัง)
+      final xml = String.fromCharCodes(xb);
       final doc = XdfDoc.parse(xml);
-      if (doc.tables.where((t) => t.is2d).isEmpty) { setState(() => msg = 'XDF นี้ไม่มีตาราง 2 มิติให้แก้'); return; }
+      if (doc.tables.where((t) => t.is2d).isEmpty) {
+        setState(() => msg = 'ไฟล์ XDF นี้ไม่มีตาราง 2 มิติ หรือเป็น XDF แบบเข้ารหัส (เปิดได้เฉพาะไฟล์ XDF แบบ XML)');
+        return;
+      }
       final bin = await f.readAsBytes();
       if (!mounted) return;
       await Navigator.of(context).push(MaterialPageRoute(builder: (_) => TunePage(

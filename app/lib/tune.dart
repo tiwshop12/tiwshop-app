@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:xml/xml.dart';
 
 // ---------- ถอดรหัสชื่อ TIS-620 (XDF เก็บ &#164; ฯลฯ เป็นไบต์ TIS-620) ----------
 String decodeTis620(String s) {
@@ -96,31 +95,40 @@ class XdfTable {
   int get count => rows * (cols <= 0 ? 1 : cols);
 }
 
+// แปลง XML entity (&#NNN; &#xHH; &amp; ฯลฯ) เป็นอักขระ — ใช้ก่อนถอด TIS-620
+String _entities(String s) {
+  s = s.replaceAllMapped(RegExp(r'&#x([0-9A-Fa-f]+);'), (m) => String.fromCharCode(int.parse(m[1]!, radix: 16)));
+  s = s.replaceAllMapped(RegExp(r'&#(\d+);'), (m) => String.fromCharCode(int.parse(m[1]!)));
+  return s.replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll('&apos;', "'");
+}
+
 class XdfDoc {
   final List<XdfTable> tables;
   XdfDoc(this.tables);
+  // พาร์สแบบ regex ที่ทนทาน (ไม่พึ่ง XML parser เข้มงวด ที่พังกับ XDF บางไฟล์)
   static XdfDoc parse(String xml) {
-    final doc = XmlDocument.parse(xml);
     final out = <XdfTable>[];
-    for (final t in doc.findAllElements('XDFTABLE')) {
-      final title = decodeTis620(t.getElement('title')?.innerText.trim() ?? 'table');
-      XmlElement? z;
-      for (final ax in t.findElements('XDFAXIS')) {
-        if (ax.getAttribute('id') == 'z') z = ax;
-      }
-      if (z == null) continue;
-      final ed = z.getElement('EMBEDDEDDATA');
-      if (ed == null) continue;
-      final addr = _hex(ed.getAttribute('mmedaddress'));
+    for (final tm in RegExp(r'<XDFTABLE[\s\S]*?</XDFTABLE>').allMatches(xml)) {
+      final t = tm.group(0)!;
+      final titleRaw = RegExp(r'<title>([\s\S]*?)</title>').firstMatch(t)?.group(1)?.trim() ?? 'table';
+      final title = decodeTis620(_entities(titleRaw));
+      // z-axis ตัวแรก
+      final zm = RegExp(r'<XDFAXIS\s+id="z"[\s\S]*?</XDFAXIS>').firstMatch(t);
+      if (zm == null) continue;
+      final z = zm.group(0)!;
+      final edm = RegExp(r'<EMBEDDEDDATA([^>]*)>').firstMatch(z);
+      if (edm == null) continue;
+      final ed = edm.group(1)!;
+      String? attr(String src, String name) => RegExp('$name="([^"]*)"').firstMatch(src)?.group(1);
+      final addr = _hex(attr(ed, 'mmedaddress'));
       if (addr == null) continue;
-      final bits = int.tryParse(ed.getAttribute('mmedelementsizebits') ?? '8') ?? 8;
-      final rc = int.tryParse(ed.getAttribute('mmedrowcount') ?? '1') ?? 1;
-      final cc = int.tryParse(ed.getAttribute('mmedcolcount') ?? '1') ?? 1;
-      final eq = z.getElement('MATH')?.getAttribute('equation') ?? 'X';
-      final mn = double.tryParse(z.getElement('min')?.innerText ?? '') ?? 0;
-      final mx = double.tryParse(z.getElement('max')?.innerText ?? '') ?? 255;
-      final signed = mn < 0;
-      out.add(XdfTable(title, addr, bits, rc, cc, signed, LinMath.fromEq(eq), mn, mx));
+      final bits = int.tryParse(attr(ed, 'mmedelementsizebits') ?? '8') ?? 8;
+      final rc = int.tryParse(attr(ed, 'mmedrowcount') ?? '1') ?? 1;
+      final cc = int.tryParse(attr(ed, 'mmedcolcount') ?? '1') ?? 1;
+      final eq = attr(z, 'equation') ?? 'X';
+      final mn = double.tryParse(RegExp(r'<min>([^<]*)</min>').firstMatch(z)?.group(1) ?? '') ?? 0;
+      final mx = double.tryParse(RegExp(r'<max>([^<]*)</max>').firstMatch(z)?.group(1) ?? '') ?? 255;
+      out.add(XdfTable(title, addr, bits.abs(), rc, cc, mn < 0, LinMath.fromEq(eq), mn, mx));
     }
     return XdfDoc(out);
   }
