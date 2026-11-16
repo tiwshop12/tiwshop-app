@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'ecu_db.dart';
+import 'tune.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart' show getApplicationDocumentsDirectory;
@@ -3801,6 +3802,35 @@ class _FlashPageState extends State<FlashPage> {
     await _load();
   }
 
+  Future<void> _tune(io.File f) async {
+    try {
+      final res = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
+      if (res == null || res.files.isEmpty) return;
+      final pf = res.files.first;
+      if (!pf.name.toLowerCase().endsWith('.xdf')) { setState(() => msg = 'กรุณาเลือกไฟล์ .xdf'); return; }
+      Uint8List? xb = pf.bytes ?? (pf.path != null ? await io.File(pf.path!).readAsBytes() : null);
+      if (xb == null) { setState(() => msg = 'อ่าน XDF ไม่ได้'); return; }
+      // XDF อาจเป็น TIS-620/latin1 ไม่ใช่ UTF-8 — ถอดแบบปลอดภัย
+      String xml;
+      try { xml = const Utf8Decoder(allowMalformed: true).convert(xb); } catch (_) { xml = String.fromCharCodes(xb); }
+      final doc = XdfDoc.parse(xml);
+      if (doc.tables.where((t) => t.is2d).isEmpty) { setState(() => msg = 'XDF นี้ไม่มีตาราง 2 มิติให้แก้'); return; }
+      final bin = await f.readAsBytes();
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => TunePage(
+        fileName: f.path.split('/').last,
+        bin: bin,
+        xdf: doc,
+        getRpm: () => (widget.c.demo || widget.c.ecuLive) ? widget.c.t.rpm : null,
+        getTps: () => (widget.c.demo || widget.c.ecuLive) ? widget.c.t.tps : null,
+        onSave: (name, bytes) async { await widget.c.importBinBytes(name, bytes); },
+      )));
+      await _load();
+    } catch (e) {
+      setState(() => msg = 'เปิดหน้าจูนไม่สำเร็จ: $e');
+    }
+  }
+
   Future<void> _send(io.File f) async {
     if (sending) return;
     final connected = widget.c.link == LinkState.connected;
@@ -3994,6 +4024,7 @@ class _FlashPageState extends State<FlashPage> {
           Text(name, style: const TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis),
           Text('$kb KB', style: const TextStyle(color: Colors.white38, fontSize: 11)),
         ])),
+        IconButton(onPressed: () => _tune(f), icon: Icon(Icons.tune, color: kAmber, size: 20), tooltip: 'จูน (BIN+XDF)'),
         IconButton(onPressed: sending ? null : () => _send(f), icon: Icon(Icons.upload, color: th.c, size: 20), tooltip: 'ส่งไปเกจ'),
         IconButton(onPressed: sending ? null : () => _delete(f), icon: const Icon(Icons.delete_outline, color: kBad, size: 20), tooltip: 'ลบ'),
       ]),
