@@ -3009,15 +3009,15 @@ class _SettingsPageState extends State<SettingsPage> {
                                   col: !connected ? kAmber : (fw != null ? kGreen : kAmber)),
                               const SizedBox(height: 6),
                               Builder(builder: (_) {
-                                final e = c.t.ecu;
-                                final id = c.t.ecmId;
+                                final e = widget.c.t.ecu;
+                                final id = widget.c.t.ecmId;
                                 return _infoRow('กล่อง ECU',
                                     !connected ? '-' : (e != null ? '${e.name}  (${e.shin ? "Shindengen" : "Keihin"})' : (id != null ? 'ไม่รู้จัก ($id)' : '-')),
                                     col: e != null ? kGreen : (!connected ? null : kAmber));
                               }),
-                              if (connected && c.t.ecu != null) ...[
+                              if (connected && widget.c.t.ecu != null) ...[
                                 const SizedBox(height: 4),
-                                _infoRow('พาร์ท', c.t.ecu!.part),
+                                _infoRow('พาร์ท', widget.c.t.ecu!.part),
                               ],
                               const SizedBox(height: 6),
                               _infoRow('TIWSHOP', 'FW $kAppFw'),
