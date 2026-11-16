@@ -172,18 +172,20 @@ class BinTable {
 }
 
 // ---------- หาแกน label (RPM = แถว, TPS = คอลัมน์) จากตาราง 1 มิติในไฟล์เดียวกัน ----------
+// หาแกน label = ตาราง 1 มิติที่จำนวนช่องตรงกัน (ชอบที่มีคีย์เวิร์ดก่อน ไม่งั้นเอาตัวแรกที่ขนาดตรง)
 List<double>? _axisLabels(XdfDoc doc, Uint8List bin, int n, List<String> keys) {
+  XdfTable? best; int bestScore = -1;
   for (final t in doc.tables) {
     final cnt = t.rows * (t.cols <= 0 ? 1 : t.cols);
     if (cnt == n && (t.rows == 1 || t.cols == 1)) {
       final up = t.title.toUpperCase();
-      if (keys.any((k) => up.contains(k))) {
-        final bt = BinTable(bin, t);
-        return [for (int i = 0; i < n; i++) t.math.toDisp(bt._rawAt(i))];
-      }
+      final score = keys.any((k) => t.title.contains(k) || up.contains(k.toUpperCase())) ? 1 : 0;
+      if (score > bestScore) { bestScore = score; best = t; }
     }
   }
-  return null;
+  if (best == null) return null;
+  final bt = BinTable(bin, best);
+  return [for (int i = 0; i < n; i++) best.math.toDisp(bt._rawAt(i))];
 }
 
 Color _heat(double v, double lo, double hi) {
@@ -218,6 +220,8 @@ class _TunePageState extends State<TunePage> {
   List<double>? rowLab, colLab;
   double? liveRpm, liveTps;
   Timer? _liveTimer;
+  final _valCtl = TextEditingController(text: '2');
+  double get _val => double.tryParse(_valCtl.text) ?? 2;
 
   List<XdfTable> get tabs => widget.xdf.tables.where((t) => t.is2d).toList();
   XdfTable get t => tabs[ti];
@@ -238,13 +242,13 @@ class _TunePageState extends State<TunePage> {
   }
 
   @override
-  void dispose() { _liveTimer?.cancel(); super.dispose(); }
+  void dispose() { _liveTimer?.cancel(); _valCtl.dispose(); super.dispose(); }
 
   void _load() {
     bt = BinTable(bin, t);
     sel.clear();
-    rowLab = _axisLabels(widget.xdf, bin, bt.rows, ['RPM', 'ROB', 'รอบ']);
-    colLab = _axisLabels(widget.xdf, bin, bt.cols, ['TPS', 'MAP', 'โหลด', 'LOAD']);
+    rowLab = _axisLabels(widget.xdf, bin, bt.rows, ['RPM', 'ROB', 'รอบ', 'รอบเครื่อง']);
+    colLab = _axisLabels(widget.xdf, bin, bt.cols, ['TPS', 'คันเร่ง', 'คัน', 'MAP', 'โหลด', 'LOAD']);
     _fit();
   }
 
@@ -381,10 +385,21 @@ class _TunePageState extends State<TunePage> {
               ),
             ),
           ),
-          _tb(Icons.remove, '', sel.isEmpty ? null : () => _add(-_step()), col: const Color(0xFF18D8FF)),
-          _tb(Icons.add, '', sel.isEmpty ? null : () => _add(_step()), col: const Color(0xFF18D8FF)),
-          _tb(Icons.percent, '-', sel.isEmpty ? null : () => _pct(-2), col: const Color(0xFFFF8A1E)),
-          _tb(Icons.percent, '+', sel.isEmpty ? null : () => _pct(2), col: const Color(0xFF28E070)),
+          // ช่องค่า (ใช้กับ +/- และ % เหมือน TunerPro)
+          Container(
+            width: 56, height: 30, margin: const EdgeInsets.symmetric(horizontal: 3),
+            decoration: BoxDecoration(color: Colors.black45, border: Border.all(color: const Color(0xFFFFE01A)), borderRadius: BorderRadius.circular(6)),
+            child: Center(child: TextField(
+              controller: _valCtl, textAlign: TextAlign.center,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              decoration: const InputDecoration(isDense: true, border: InputBorder.none, hintText: 'ค่า', contentPadding: EdgeInsets.zero),
+            )),
+          ),
+          _tb(Icons.remove, '', sel.isEmpty ? null : () => _add(-_val), col: const Color(0xFF18D8FF)),
+          _tb(Icons.add, '', sel.isEmpty ? null : () => _add(_val), col: const Color(0xFF18D8FF)),
+          _tb(Icons.percent, '-', sel.isEmpty ? null : () => _pct(-_val), col: const Color(0xFFFF8A1E)),
+          _tb(Icons.percent, '+', sel.isEmpty ? null : () => _pct(_val), col: const Color(0xFF28E070)),
           _tb(Icons.edit, 'ตั้งค่า', sel.isEmpty ? null : _setValue),
           _tb(Icons.copy, 'COPY', sel.isEmpty ? null : _copy),
           _tb(Icons.paste, 'PASTE', clip == null ? null : _paste),
