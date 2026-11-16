@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:file_picker/file_picker.dart';
+import 'ecu_db.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart' show getApplicationDocumentsDirectory;
@@ -267,6 +268,8 @@ class Telemetry {
   // เขียนไฟล์ ECU (FW 1.3.0, ไบต์ 75..78): flashState 0 ว่าง..7, flashPct, flashVendorDet 1 Keihin 2 Shin, fileRx 0 ว่าง 1 รับ 2 สำเร็จ 3 ผิด
   final int flashState, flashPct, flashVendor, fileRx;
   final bool flashSup; // เฟิร์มแวร์รองรับการเขียนไฟล์ (แพ็กเกจยาว >= 79 ไบต์)
+  final String? ecmId; // รหัส ECM 5 ไบต์ (hex) จากกล่องที่ต่ออยู่ (แพ็กเกจ >= 84)
+  EcuInfo? get ecu => ecuLookup(ecmId);
   Telemetry({
     this.fresh = false, this.state = 0, this.proto = 0, this.bike = 0, this.img = 0,
     this.rpm, this.speed, this.ect, this.iat, this.eot, this.tps, this.map,
@@ -274,6 +277,7 @@ class Telemetry {
     this.fwMaj, this.fwMin, this.fwPatch,
     this.dtcSup = false, this.dtcValid = false, this.dtcClear = 0, this.dtcCur = const [], this.dtcSto = const [],
     this.flashState = 0, this.flashPct = 0, this.flashVendor = 0, this.fileRx = 0, this.flashSup = false,
+    this.ecmId,
   });
   String? get fwText => fwMaj == null ? null : '$fwMaj.$fwMin.$fwPatch';
 
@@ -305,6 +309,9 @@ class Telemetry {
       flashPct: b.length >= 79 ? b[76] : 0,
       flashVendor: b.length >= 79 ? b[77] : 0,
       fileRx: b.length >= 79 ? b[78] : 0,
+      ecmId: (b.length >= 84 && (b[79] | b[80] | b[81] | b[82] | b[83]) != 0)
+          ? b.sublist(79, 84).map((x) => x.toRadixString(16).padLeft(2, '0')).join().toUpperCase()
+          : null,
     );
   }
 }
@@ -3001,6 +3008,18 @@ class _SettingsPageState extends State<SettingsPage> {
                                   !connected ? 'ยังไม่ได้เชื่อมต่อ' : (fw != null ? 'FW $fw' : 'ไม่ทราบ (เฟิร์มแวร์เก่า)'),
                                   col: !connected ? kAmber : (fw != null ? kGreen : kAmber)),
                               const SizedBox(height: 6),
+                              Builder(builder: (_) {
+                                final e = c.t.ecu;
+                                final id = c.t.ecmId;
+                                return _infoRow('กล่อง ECU',
+                                    !connected ? '-' : (e != null ? '${e.name}  (${e.shin ? "Shindengen" : "Keihin"})' : (id != null ? 'ไม่รู้จัก ($id)' : '-')),
+                                    col: e != null ? kGreen : (!connected ? null : kAmber));
+                              }),
+                              if (connected && c.t.ecu != null) ...[
+                                const SizedBox(height: 4),
+                                _infoRow('พาร์ท', c.t.ecu!.part),
+                              ],
+                              const SizedBox(height: 6),
                               _infoRow('TIWSHOP', 'FW $kAppFw'),
                               if (connected && fw != null && fw != kAppFw)
                                 const Padding(
@@ -3877,6 +3896,8 @@ class _FlashPageState extends State<FlashPage> {
                         final done = t.flashState == 6, fail = t.flashState == 7;
                         return _panel(th, 'สถานะกล่อง', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           _kv('เกจ', connected ? 'เชื่อมต่อแล้ว' : 'ยังไม่ได้เชื่อมต่อ', connected ? kGreen : kAmber),
+                          _kv('กล่อง ECU', t.ecu != null ? t.ecu!.name : (t.ecmId != null ? 'ไม่รู้จัก (${t.ecmId})' : '—'),
+                              t.ecu != null ? Colors.white : Colors.white38),
                           _kv('รองรับการเขียน', t.flashSup ? 'ใช่ (FW ${t.fwText ?? "?"})' : 'ไม่ (เฟิร์มแวร์เก่า)', t.flashSup ? kGreen : kAmber),
                           _kv('ไฟล์ในเกจ', sentName ?? (t.fileRx == 2 ? 'มีไฟล์พร้อมเขียน' : '—'),
                               (sentName != null || t.fileRx == 2) ? Colors.white : Colors.white38),
