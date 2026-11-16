@@ -60,7 +60,10 @@ class _Expr {
     if (p < s.length && (s[p] == 'X' || s[p] == 'x')) { p++; return x; }
     final st = p;
     while (p < s.length && (RegExp(r'[0-9.eE]').hasMatch(s[p]) || ((s[p] == '+' || s[p] == '-') && p > st && (s[p - 1] == 'e' || s[p - 1] == 'E')))) p++;
-    return double.tryParse(s.substring(st, p)) ?? 0;
+    var num = s.substring(st, p);
+    if (num.startsWith('.')) num = '0$num';          // ".001" -> "0.001" (Dart ไม่รับเลขขึ้นต้นด้วยจุด)
+    if (num.endsWith('.')) num = '${num}0';
+    return double.tryParse(num) ?? 0;
   }
 }
 

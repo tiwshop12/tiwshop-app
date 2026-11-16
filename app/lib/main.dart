@@ -1096,6 +1096,34 @@ class GaugeController extends ChangeNotifier {
     return f;
   }
 
+  // ----- คลัง XDF (เก็บไว้ในแอพ ไม่ต้องหาไฟล์ในเครื่องทุกครั้ง) -----
+  Future<io.Directory> _xdfDir() async {
+    final base = await getApplicationDocumentsDirectory();
+    final d = io.Directory('${base.path}/xdf');
+    if (!await d.exists()) await d.create(recursive: true);
+    return d;
+  }
+
+  Future<List<io.File>> listXdfs() async {
+    try {
+      final d = await _xdfDir();
+      final l = (await d.list().toList()).whereType<io.File>().where((f) => f.path.toLowerCase().endsWith('.xdf')).toList();
+      l.sort((a, b) => a.path.compareTo(b.path));
+      return l;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<io.File> importXdfBytes(String name, Uint8List bytes) async {
+    final d = await _xdfDir();
+    var safe = name.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    if (!safe.toLowerCase().endsWith('.xdf')) safe = '$safe.xdf';
+    final f = io.File('${d.path}/$safe');
+    await f.writeAsBytes(bytes, flush: true);
+    return f;
+  }
+
   Future<void> deleteBinFile(io.File f) async {
     try {
       if (await f.exists()) await f.delete();
@@ -3776,21 +3804,49 @@ class _FlashPageState extends State<FlashPage> {
 
   Future<void> _load() async {
     final l = await widget.c.listBins();
+    final x = await widget.c.listXdfs();
     if (!mounted) return;
-    setState(() { files = l; loading = false; });
+    setState(() { files = l; xdfs = x; loading = false; });
   }
 
+  List<io.File> xdfs = [];
+
+  Future<Uint8List?> _bytesOf(PlatformFile f) async {
+    if (f.bytes != null) return f.bytes;
+    if (f.path != null) {
+      final ff = io.File(f.path!);
+      if (await ff.exists()) return ff.readAsBytes();
+    }
+    return null;
+  }
+
+  bool _looksXdf(Uint8List b) {
+    final head = String.fromCharCodes(b.take(4000));
+    return head.contains('XDFFORMAT') || head.contains('XDFTABLE') || head.contains('XDFHEADER');
+  }
+
+  // นำเข้าได้ทั้ง .bin และ .xdf (เลือกหลายไฟล์พร้อมกันได้)
   Future<void> _import() async {
     try {
-      final res = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
+      final res = await FilePicker.platform.pickFiles(type: FileType.any, withData: true, allowMultiple: true);
       if (res == null || res.files.isEmpty) return;
-      final f = res.files.first;
-      Uint8List? bytes = f.bytes;
-      bytes ??= (f.path != null) ? await io.File(f.path!).readAsBytes() : null;
-      if (bytes == null) { setState(() => msg = 'อ่านไฟล์ไม่ได้'); return; }
-      if (bytes.length < 1024 || bytes.length > 700000) { setState(() => msg = 'ขนาดไฟล์ไม่ถูกต้อง (ต้อง 1KB–700KB)'); return; }
-      await widget.c.importBinBytes(f.name, bytes);
-      setState(() => msg = 'เพิ่มไฟล์ ${f.name} แล้ว');
+      int nb = 0, nx = 0;
+      final bad = <String>[];
+      for (final f in res.files) {
+        final bytes = await _bytesOf(f);
+        if (bytes == null) { bad.add('${f.name} (อ่านไม่ได้)'); continue; }
+        final isXdf = f.name.toLowerCase().trim().endsWith('.xdf') || _looksXdf(bytes);
+        if (isXdf) {
+          if (!_looksXdf(bytes)) { bad.add('${f.name} (XDF เข้ารหัส/ไม่ใช่ XML)'); continue; }
+          await widget.c.importXdfBytes(f.name, bytes); nx++;
+        } else if (f.name.toLowerCase().endsWith('.rar') || f.name.toLowerCase().endsWith('.zip')) {
+          bad.add('${f.name} (ต้องแตกไฟล์ก่อน)');
+        } else {
+          if (bytes.length < 1024 || bytes.length > 700000) { bad.add('${f.name} (ขนาดไม่ใช่ไฟล์ ECU)'); continue; }
+          await widget.c.importBinBytes(f.name, bytes); nb++;
+        }
+      }
+      setState(() => msg = 'เพิ่ม BIN $nb ไฟล์, XDF $nx ไฟล์${bad.isEmpty ? '' : '\nข้าม: ${bad.join(', ')}'}');
       await _load();
     } catch (e) {
       setState(() => msg = 'นำเข้าไฟล์ไม่สำเร็จ: $e');
@@ -3802,14 +3858,53 @@ class _FlashPageState extends State<FlashPage> {
     await _load();
   }
 
+  // คะแนนความเหมือนชื่อ BIN กับ XDF (เช่น K03-H01) — ใช้เรียงรายการให้ตัวที่ตรงขึ้นก่อน
+  int _match(String bin, String xdf) {
+    final tok = RegExp(r'[A-Z0-9]{3}-[A-Z0-9]{3}').allMatches(bin.toUpperCase()).map((m) => m.group(0)!).toSet();
+    final x = xdf.toUpperCase();
+    return tok.where(x.contains).length;
+  }
+
   Future<void> _tune(io.File f) async {
     try {
-      final res = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
-      if (res == null || res.files.isEmpty) return;
-      final pf = res.files.first;
-      if (!pf.name.toLowerCase().endsWith('.xdf')) { setState(() => msg = 'กรุณาเลือกไฟล์ .xdf'); return; }
-      Uint8List? xb = pf.bytes ?? (pf.path != null ? await io.File(pf.path!).readAsBytes() : null);
-      if (xb == null) { setState(() => msg = 'อ่าน XDF ไม่ได้'); return; }
+      final binName = f.path.split('/').last;
+      final sorted = [...xdfs]..sort((a, b) => _match(binName, b.path.split('/').last).compareTo(_match(binName, a.path.split('/').last)));
+      // เลือก XDF: จากคลังในแอพ หรือจากเครื่อง
+      final choice = await showModalBottomSheet<Object>(
+        context: context,
+        backgroundColor: const Color(0xFF12161C),
+        builder: (sctx) => SafeArea(
+          child: ListView(shrinkWrap: true, children: [
+            Padding(padding: const EdgeInsets.all(12), child: Text('เลือก XDF สำหรับ $binName', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+            if (sorted.isEmpty) const Padding(padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text('ยังไม่มี XDF ในคลัง — กด "นำเข้าไฟล์" แล้วเลือกไฟล์ .xdf (แตกจาก .rar ก่อน)', style: TextStyle(color: Colors.white54, fontSize: 12))),
+            for (final x in sorted)
+              ListTile(
+                leading: Icon(Icons.description, color: _match(binName, x.path.split('/').last) > 0 ? kGreen : Colors.white54),
+                title: Text(x.path.split('/').last, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                subtitle: _match(binName, x.path.split('/').last) > 0 ? const Text('ชื่อตรงกับ BIN', style: TextStyle(color: kGreen, fontSize: 11)) : null,
+                onTap: () => Navigator.pop(sctx, x),
+              ),
+            ListTile(
+              leading: const Icon(Icons.folder_open, color: kAmber),
+              title: const Text('เลือกไฟล์ .xdf จากเครื่อง', style: TextStyle(color: kAmber)),
+              onTap: () => Navigator.pop(sctx, 'pick'),
+            ),
+          ]),
+        ),
+      );
+      if (choice == null) return;
+      Uint8List? xb;
+      if (choice is io.File) {
+        xb = await choice.readAsBytes();
+      } else {
+        final res = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
+        if (res == null || res.files.isEmpty) return;
+        xb = await _bytesOf(res.files.first);
+        if (xb != null && _looksXdf(xb)) { await widget.c.importXdfBytes(res.files.first.name, xb); await _load(); }
+      }
+      if (xb == null) { setState(() => msg = 'ไม่พบไฟล์ / อ่าน XDF ไม่ได้'); return; }
+      if (!_looksXdf(xb)) { setState(() => msg = 'ไฟล์นี้ไม่ใช่ XDF แบบ XML (อาจยังเข้ารหัสอยู่ หรือยังอยู่ใน .rar)'); return; }
       // XDF เก็บเป็น ASCII/TIS-620 ไบต์ — map ไบต์ตรง ๆ เป็นโค้ดพอยต์ (พาร์สด้วย regex ภายหลัง)
       final xml = String.fromCharCodes(xb);
       final doc = XdfDoc.parse(xml);
@@ -3984,12 +4079,12 @@ class _FlashPageState extends State<FlashPage> {
                       Row(children: [
                         _action('นำเข้าไฟล์', Icons.add, th.c, _import),
                         const Spacer(),
-                        Text('${files.length} ไฟล์', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                        Text('BIN ${files.length} · XDF ${xdfs.length}', style: const TextStyle(color: Colors.white38, fontSize: 11)),
                       ]),
                       const SizedBox(height: 10),
                       if (loading) const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
                       else if (files.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text('ยังไม่มีไฟล์ กด "นำเข้าไฟล์" เพื่อเพิ่มไฟล์ .bin', style: TextStyle(color: Colors.white38, fontSize: 12)))
+                        child: Text('ยังไม่มีไฟล์ กด "นำเข้าไฟล์" เพื่อเพิ่ม .bin และ .xdf (แตกไฟล์ .rar ก่อน)', style: TextStyle(color: Colors.white38, fontSize: 12)))
                       else
                         for (final f in files) _fileRow(th, f),
                     ])),
