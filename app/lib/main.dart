@@ -3908,8 +3908,8 @@ class _FlashPageState extends State<FlashPage> {
       // XDF เก็บเป็น ASCII/TIS-620 ไบต์ — map ไบต์ตรง ๆ เป็นโค้ดพอยต์ (พาร์สด้วย regex ภายหลัง)
       final xml = String.fromCharCodes(xb);
       final doc = XdfDoc.parse(xml);
-      if (doc.tables.where((t) => t.is2d).isEmpty) {
-        setState(() => msg = 'ไฟล์ XDF นี้ไม่มีตาราง 2 มิติ หรือเป็น XDF แบบเข้ารหัส (เปิดได้เฉพาะไฟล์ XDF แบบ XML)');
+      if (doc.items.isEmpty) {
+        setState(() => msg = 'ไฟล์ XDF นี้ไม่มีพารามิเตอร์ หรือเป็น XDF แบบเข้ารหัส (เปิดได้เฉพาะไฟล์ XDF แบบ XML)');
         return;
       }
       final bin = await f.readAsBytes();
