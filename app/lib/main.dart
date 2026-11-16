@@ -362,6 +362,7 @@ class GaugeController extends ChangeNotifier {
   int? satUsed, satTotal; // จำนวนดาวเทียมที่ใช้คำนวณตำแหน่ง / จำนวนที่เห็นทั้งหมด (อ่านจริงจาก Android GNSS)
   int satMax = 0; // จำนวนมากสุดที่เครื่องนี้เคยจับได้
   double? gpsAccM, spdAccKmh; // ความแม่นยำตำแหน่ง (m) / ความเร็ว (km/h)
+  bool _gpsTrust = false;     // fix ปัจจุบันแม่นพอให้บันทึกค่าสูงสุดไหม (รัศมี ≤25 ม. และความเร็ว ±≤4 กม./ชม.)
   static const List<double> dragDist = [201, 402, 500, 1000];
   final List<DragRun> runs = List.generate(3, (_) => DragRun());
   int dragSel = 0;
@@ -634,7 +635,7 @@ class GaugeController extends ChangeNotifier {
               intervalDuration: const Duration(milliseconds: 200),
               forceLocationManager: true,
             )
-          : const LocationSettings(accuracy: LocationAccuracy.best, distanceFilter: 0);
+          : const LocationSettings(accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 0);
       _gpsSub = Geolocator.getPositionStream(locationSettings: ls).listen((p) {
         if (demo) return; // DEMO ใช้ GPS จำลอง (ไม่ให้ GPS จริงที่จอดนิ่งมาทับ)
         gpsOk = true;
@@ -642,6 +643,10 @@ class GaugeController extends ChangeNotifier {
         gpsSpeed = math.max(0.0, p.speed * 3.6);
         gpsAccM = p.accuracy;
         spdAccKmh = p.speedAccuracy > 0 ? p.speedAccuracy * 3.6 : null;
+        // ไว้ใจ fix นี้ถ้ารัศมีตำแหน่งแม่น (≤25 ม.) และความเร็วแม่น (±≤4 กม./ชม.) — ค่า ≤0 = ชิปไม่บอก ให้ผ่าน
+        final accOk = p.accuracy <= 0 || p.accuracy <= 25;
+        final spdOk = p.speedAccuracy <= 0 || p.speedAccuracy * 3.6 <= 4;
+        _gpsTrust = accOk && spdOk;
         _dragUpdate(gpsSpeed!, p.timestamp);
         _track();
         _sendGps();
@@ -699,18 +704,20 @@ class GaugeController extends ChangeNotifier {
   double tsBest = 0;
   double? tsRpm, tsAfr;
   DateTime? tsAt;
-  double? get tsNow => demo ? (gpsSpeed ?? t.speed) : (gpsOk ? gpsSpeed : (ecuLive ? t.speed : null));
-  String get tsSrc => (demo || gpsOk) ? 'GPS' : (ecuLive ? 'ECU' : '--');
+  double? get tsNow => demo ? gpsSpeed : (gpsOk ? gpsSpeed : null);   // วัดจาก GPS โทรศัพท์โดยตรง ไม่พึ่ง ECU
+  String get tsSrc => (demo || gpsOk) ? 'GPS' : '--';
   void tsClear() {
     tsBest = 0; tsRpm = null; tsAfr = null; tsAt = null;
     notifyListeners();
   }
 
   void _track() {
+    final gpsTrust = demo || _gpsTrust;             // ยอมรับเฉพาะ fix ที่แม่น จะได้ไม่บันทึกค่าสูงสุดหลอกจาก GPS กระตุก
     final s = shownSpeed;
-    if (s != null && s > topSpeed) topSpeed = s;
+    final sIsGps = demo || Cfg.i.speedGps;          // ความเร็วหลักมาจาก GPS หรือไม่
+    if (s != null && s > topSpeed && (!sIsGps || gpsTrust)) topSpeed = s;
     final ts = tsNow;
-    if (ts != null && ts >= 1 && ts > tsBest) {
+    if (ts != null && ts >= 1 && ts > tsBest && gpsTrust) {
       tsBest = ts;
       final live = demo || ecuLive;
       tsRpm = live ? t.rpm : null;
