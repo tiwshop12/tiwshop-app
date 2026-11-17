@@ -823,8 +823,10 @@ class GaugeController extends ChangeNotifier {
   DateTime? tsAt;
   double? get tsNow => (demo || gpsOk) ? gpsRaw : null; // ค่าที่วัดจริง (ไม่ใช่ค่าที่เลื่อนบนจอ)   // วัดจาก GPS โทรศัพท์โดยตรง ไม่พึ่ง ECU
   String get tsSrc => (demo || gpsOk) ? 'GPS' : '--';
+  /// ปุ่ม CLEAR หน้า TOP SPEED: ล้างความเร็วสูงสุดทุกหน้า (TOP SPEED, ช่อง TOP SPD, หน้า DASH)
   void tsClear() {
     tsBest = 0; tsRpm = null; tsAfr = null; tsAt = null;
+    topSpeed = 0;
     notifyListeners();
   }
 
@@ -848,6 +850,7 @@ class GaugeController extends ChangeNotifier {
 
   void resetMinMax() {
     topSpeed = 0;
+    tsBest = 0; tsRpm = null; tsAfr = null; tsAt = null;
     mm.clear();
     for (int i = 0; i < 4; i++) {
       gMin[i] = null;
