@@ -147,6 +147,8 @@ class Cfg extends ChangeNotifier {
   int graphOn = 15; // หน้า GRAPH: บิตเปิด-ปิดเส้นกราฟ RPM/TPS/GPS/AFR
   List<int> main = [kTps, kAfr, kIgn, kTemp, kEot, kBatt, kIat]; // ซ้าย 3 (0-2) + ขวา 3 (3-5) | ช่องที่ 7 เก็บไว้ (ไม่แสดง) ให้ค่าที่บันทึกเดิมยังเข้ากันได้
   List<int> grid = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  List<int> ctr = [kSpd, kRpm]; // หน้าเกจ: [ตัวเลขกลางเกจ, ช่องใต้เกจ] — แตะเพื่อเลือกค่า (เลือกค่าที่อยู่อีกช่อง = สลับกัน)
+  List<int> dash = [kInj, kIgn, kIat, kBatt, kO2, kStft, kLtft]; // หน้า DASH: รายการขวา 7 แถว
 
   AppTheme get t => kThemes[themeIdx];
 
@@ -170,6 +172,8 @@ class Cfg extends ChangeNotifier {
       graphOn = (p.getInt('gon') ?? 15) & 15;
       main = _parse(p.getString('main'), 7) ?? main;
       grid = _parse(p.getString('grid'), 12) ?? grid;
+      ctr = _parse(p.getString('ctr'), 2) ?? ctr;
+      dash = _parse(p.getString('dash'), 7) ?? dash;
     } catch (_) {}
   }
 
@@ -185,6 +189,8 @@ class Cfg extends ChangeNotifier {
       await p.setInt('gon', graphOn);
       await p.setString('main', main.join(','));
       await p.setString('grid', grid.join(','));
+      await p.setString('ctr', ctr.join(','));
+      await p.setString('dash', dash.join(','));
     } catch (_) {}
   }
 
@@ -215,6 +221,11 @@ class Cfg extends ChangeNotifier {
 
   Future<void> toggleSpeed() {
     speedGps = !speedGps;
+    return _save();
+  }
+
+  Future<void> setSpeedGps(bool v) {
+    speedGps = v;
     return _save();
   }
 
@@ -352,7 +363,10 @@ class GaugeController extends ChangeNotifier {
   double? gpsSpeed; // km/h — ค่าที่โชว์ (เลื่อนนุ่มระหว่างจุด GPS)
   double? gpsRaw;   // km/h — ค่าที่วัดได้จริง (ผ่านตัวกรองแล้ว) ใช้บันทึกความเร็วสูงสุด/DRAG
   double _gFrom = 0, _gTo = 0;
-  int _gT0 = 0, _gDur = 1000, _gPrevFixMs = 0, _gSpikeN = 0;
+  int _gT0 = 0, _gDur = 1000, _gPrevFixMs = 0, _gSpikeN = 0, _gMoveN = 0;
+  double? _gLastV;                         // ค่าก่อนหน้า (ใช้กันค่ากระโดด)
+  bool _gMoving = false;                   // ยืนยันแล้วว่ารถเคลื่อนที่จริง
+  final List<List<double>> _gHist = [];    // [ms, lat, lon, km/h] ย้อนหลัง ~4 วินาที (ตรวจ GPS ลอยตอนจอดนิ่ง)
   Timer? _gpsAnim;
   double topSpeed = 0;
   final Map<String, List<double>> mm = {}; // ต่ำสุด/สูงสุดของแต่ละค่า
@@ -670,7 +684,7 @@ class GaugeController extends ChangeNotifier {
         // กันค่ากระโดด: รถเร่ง/เบรกจริงไม่เกิน ~1.2g (≈43 กม./ชม. ต่อวินาที) ; โดดเกินติดกัน 3 ครั้ง = ของจริง (เช่นออกจากอุโมงค์)
         final dt = _gPrevFixMs == 0 ? 1.0 : ((now - _gPrevFixMs) / 1000.0).clamp(0.05, 5.0).toDouble();
         bool spike = false;
-        final prev = gpsRaw;
+        final prev = _gLastV;
         if (prev != null) {
           final maxStep = 43.0 * dt + 3.0;
           if ((v - prev).abs() > maxStep) {
@@ -686,14 +700,40 @@ class GaugeController extends ChangeNotifier {
         }
         final interval = _gPrevFixMs == 0 ? 1000 : (now - _gPrevFixMs).clamp(80, 1500).toInt();
         _gPrevFixMs = now;
-        gpsRaw = v;
+        _gLastV = v;
+        // ---- จอดนิ่งแต่ GPS ลอย (ในอาคาร/ใต้หลังคา สัญญาณสะท้อน) -> ต้องโชว์ 0 ----
+        double vs = v;
+        // 1) ความเร็วต่ำกว่าความคลาดเคลื่อนที่ชิปบอก = เชื่อไม่ได้
+        if (saKmh > 0 && vs < saKmh * 1.5) vs = 0;
+        // 2) ตำแหน่งไม่แม่น (รัศมี >20 ม.) แล้วความเร็วต่ำ = มักเป็นค่าลอย
+        if (p.accuracy > 20 && vs < 15) vs = 0;
+        // 3) เทียบระยะที่ "ควรไป" ตามความเร็ว กับระยะที่ตำแหน่งย้ายจริงใน ~4 วินาที : ลอยอยู่กับที่ = ตำแหน่งไม่ไปไหน
+        _gHist.add([now.toDouble(), p.latitude, p.longitude, v]);
+        while (_gHist.length > 2 && now - _gHist.first[0] > 4000) { _gHist.removeAt(0); }
+        if (vs > 0 && _gHist.length >= 3 && now - _gHist.first[0] >= 2500) {
+          double want = 0;
+          for (int i = 1; i < _gHist.length; i++) {
+            want += _gHist[i][3] / 3.6 * ((_gHist[i][0] - _gHist[i - 1][0]) / 1000.0);
+          }
+          final got = Geolocator.distanceBetween(_gHist.first[1], _gHist.first[2], _gHist.last[1], _gHist.last[2]);
+          if (want >= 6 && got < want * 0.45) vs = 0;
+        }
+        // 4) จาก 0 ต้องได้ค่าวิ่งติดกัน 2 ครั้งก่อน ถึงจะเริ่มโชว์ความเร็ว (กันค่าลอยครั้งเดียว)
+        if (vs > 0) {
+          if (!_gMoving && ++_gMoveN >= 2) _gMoving = true;
+        } else {
+          _gMoving = false;
+          _gMoveN = 0;
+        }
+        if (!_gMoving) vs = 0;
+        gpsRaw = vs;
         // บันทึกค่าสูงสุดเฉพาะจุดที่แม่นพอ: รัศมี ≤30 ม. และความเร็ว ±≤9 กม./ชม. (ค่า ≤0 = ชิปไม่บอก ให้ผ่าน) และไม่ใช่ค่ากระโดด
         final accOk = p.accuracy <= 0 || p.accuracy <= 30;
         final spdOk = saKmh <= 0 || saKmh <= 9;
-        _gpsTrust = accOk && spdOk && !spike;
+        _gpsTrust = accOk && spdOk && !spike && _gMoving;
         // ตัวเลขบนจอ: เลื่อนจากค่าที่โชว์อยู่ไปค่าใหม่แบบต่อเนื่องภายในช่วงเวลาระหว่างจุด GPS (ไม่โดดทีละขั้น)
-        _gFrom = gpsSpeed ?? v;
-        _gTo = v;
+        _gFrom = gpsSpeed ?? vs;
+        _gTo = vs;
         _gT0 = now;
         _gDur = math.max(60, (interval * 0.9).round());
         _gpsAnimStart();
@@ -715,8 +755,12 @@ class GaugeController extends ChangeNotifier {
           }
           _rPrevKmh = null; // ต้องได้ค่าต่ำกว่า 5 km/h ใหม่ก่อนออกตัวรอบถัดไป
           gpsRaw = null; // สัญญาณกลับมาใหม่ ไม่เทียบกับค่าเก่า
+          _gLastV = null;
           _gPrevFixMs = 0;
           _gSpikeN = 0;
+          _gMoving = false;
+          _gMoveN = 0;
+          _gHist.clear();
           notifyListeners();
         }
       });
@@ -1293,7 +1337,11 @@ class GaugeController extends ChangeNotifier {
       gpsOk = false;
       gpsSpeed = null;
       gpsRaw = null;
+      _gLastV = null;
       _gPrevFixMs = 0;
+      _gMoving = false;
+      _gMoveN = 0;
+      _gHist.clear();
       gpsAccM = null;
       spdAccKmh = null;
       satUsed = null;
@@ -1447,11 +1495,26 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
 }
 
 // ---------- เลือกค่าที่จะแสดงในช่อง (เหมือนเมนู SELECT ของ TEST1) ----------
-Future<void> pickKey(BuildContext context, List<int> arr, int idx) {
+Future<void> pickKey(BuildContext context, List<int> arr, int idx, {bool speedSrc = false}) {
   final th = Cfg.i.t;
+  Widget srcBtn(String label, bool on, VoidCallback f) => InkWell(
+        onTap: f,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          width: 92,
+          padding: const EdgeInsets.symmetric(vertical: 9),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: on ? th.c.withOpacity(0.3) : Colors.black45,
+            border: Border.all(color: on ? th.c : Colors.white24, width: on ? 1.6 : 1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(label, style: const TextStyle(fontFamily: kFont, fontSize: 9)),
+        ),
+      );
   return showDialog<void>(
     context: context,
-    builder: (dctx) => Dialog(
+    builder: (dctx) => StatefulBuilder(builder: (dctx, setD) => Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.all(12),
       child: Center(
@@ -1467,6 +1530,16 @@ Future<void> pickKey(BuildContext context, List<int> arr, int idx) {
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('SELECT', style: TextStyle(fontFamily: kFont, fontSize: 12, color: th.c)),
               const SizedBox(height: 10),
+              if (speedSrc) ...[
+                Text('SPD จาก', style: TextStyle(fontFamily: kFont, fontSize: 9, color: th.c2)),
+                const SizedBox(height: 6),
+                Row(children: [
+                  srcBtn('GPS', Cfg.i.speedGps, () async { await Cfg.i.setSpeedGps(true); setD(() {}); }),
+                  const SizedBox(width: 8),
+                  srcBtn('ECU', !Cfg.i.speedGps, () async { await Cfg.i.setSpeedGps(false); setD(() {}); }),
+                ]),
+                const SizedBox(height: 12),
+              ],
               Wrap(spacing: 8, runSpacing: 8, children: [
                 for (int k = 0; k < kKeys.length; k++)
                   InkWell(
@@ -1492,7 +1565,7 @@ Future<void> pickKey(BuildContext context, List<int> arr, int idx) {
           ),
         ),
       ),
-    ),
+    )),
   );
 }
 
@@ -2248,7 +2321,7 @@ class _GaugePageState extends State<GaugePage> {
   }
 
   /// สร้างช่องค่าจากคีย์: สี/บาร์/กระพริบตามกฎ
-  Widget _slotTile(int key, VoidCallback onTap, bool blinkOn, {double vs = 30}) {
+  Widget _slotTile(int key, VoidCallback onTap, bool blinkOn, {double vs = 30, double bm = 6, bool minmax = false}) {
     final kd = kKeys[key];
     final cfg = Cfg.i;
     final v = c.keyVal(key);
@@ -2283,11 +2356,12 @@ class _GaugePageState extends State<GaugePage> {
     }
     return StatTile(
       th: cfg.t, label: kd.name, unit: kd.unit, value: s, valueColor: vc,
-      alert: alert, blinkOn: blinkOn, bar: bar, barColor: bc, onTap: onTap, valueSize: vs,
+      alert: alert, blinkOn: blinkOn, bar: bar, barColor: bc, onTap: onTap, valueSize: vs, bottomMargin: bm,
+      mn: minmax && key == kRpm ? c.mnStr('rpm') : null, mx: minmax && key == kRpm ? c.mxStr('rpm') : null,
     );
   }
 
-  // เกจกลาง: ความเร็ว (แตะสลับ GPS/ECU) อยู่กลางเกจ, RPM อยู่ใต้เกจ
+  // เกจกลาง: ตัวเลขกลางเกจ + ช่องใต้เกจ เลือกค่าได้ (แตะ) ; เข็มเกจ = RPM เสมอ
   Widget _center(BoxConstraints cs, AppTheme th) {
     final cfg = Cfg.i;
     final w = cs.maxWidth, h = cs.maxHeight;
@@ -2297,7 +2371,10 @@ class _GaugePageState extends State<GaugePage> {
     final cx = w / 2, cy = gaugeCy(r);
     final rpm = c.t.rpm;
     final frac = rpm == null ? 0.0 : (rpm / kMaxRpm).clamp(0.0, 1.0).toDouble();
-    final sp = c.shownSpeed;
+    final ck = cfg.ctr[0];
+    final ckd = kKeys[ck];
+    final sp = c.keyVal(ck);
+    final cLabel = ck == kSpd ? 'km/h · ${c.speedSrc}' : (ckd.unit.isEmpty ? ckd.name : '${ckd.name} · ${ckd.unit}');
     final tileW = math.min(math.max(r * 1.5, 150.0), 230.0);
 
     return Stack(children: [
@@ -2318,12 +2395,12 @@ class _GaugePageState extends State<GaugePage> {
         left: cx - r * 0.5, width: r, top: cy - r * 0.34, height: r * 0.72,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: cfg.toggleSpeed,
+          onTap: () => pickKey(context, cfg.ctr, 0, speedSrc: true),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Expanded(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(sp == null ? '--' : sp.toStringAsFixed(0),
+                child: Text(sp == null ? '--' : sp.toStringAsFixed(ckd.dec),
                     style: TextStyle(fontFamily: kFont, fontSize: 60, color: Colors.white, shadows: [
                       Shadow(color: Color.lerp(th.c, Colors.black, 0.55)!, offset: const Offset(2.5, 2.5)),
                     ])),
@@ -2337,7 +2414,7 @@ class _GaugePageState extends State<GaugePage> {
                 border: Border.all(color: th.c2, width: 1),
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Text('km/h · ${c.speedSrc}', style: TextStyle(fontSize: math.max(10.0, r * 0.085), color: Colors.white, fontWeight: FontWeight.bold)),
+                Text(cLabel, style: TextStyle(fontSize: math.max(10.0, r * 0.085), color: Colors.white, fontWeight: FontWeight.bold)),
                 const SizedBox(width: 3),
                 Icon(Icons.swap_horiz, size: math.max(12.0, r * 0.1), color: th.c2),
               ]),
@@ -2347,11 +2424,7 @@ class _GaugePageState extends State<GaugePage> {
       ),
       Positioned(
         left: cx - tileW / 2, width: tileW, top: cy + 0.74 * r, height: tileH,
-        child: StatTile(
-          th: th, label: 'RPM', unit: 'rpm', value: rpm == null ? '--' : rpm.toStringAsFixed(0),
-          bar: frac, barColor: (p) => rpmColor(p * kMaxRpm, cfg.shift),
-          mn: c.mnStr('rpm'), mx: c.mxStr('rpm'), bottomMargin: 0, valueSize: 26,
-        ),
+        child: _slotTile(cfg.ctr[1], () => pickKey(context, cfg.ctr, 1, speedSrc: true), false, vs: 26, bm: 0, minmax: true),
       ),
     ]);
   }
@@ -4423,15 +4496,15 @@ class DashPage extends StatelessWidget {
     final t = c.t;
     final live = c.demo || c.ecuLive;
     double? v(double? x) => live ? x : null;
-    final rows = <List<String>>[
-      ['INJ', 'ms', _f(v(t.inj), 2)],
-      ['IGN', 'deg', _f(v(t.ign), 1)],
-      ['IAT', '°C', _f(v(t.iat), 0)],
-      ['BATT', 'V', _f(v(t.batt), 1)],
-      ['O2', 'V', _f(v(t.o2v), 2)],
-      ['STFT', '%', _f(v(t.stft == null ? null : (t.stft! - 1) * 100), 1)],
-      ['LTFT', '%', _f(v(t.ltft == null ? null : (t.ltft! - 1) * 100), 1)],
-    ];
+    // รายการขวา: แตะแถวเพื่อเลือกค่าอื่น (เลือกค่าที่อยู่อีกแถว = สลับกัน)
+    List<String> row(int k) {
+      final kd = kKeys[k];
+      final raw = (k == kSpd || k == kTop) ? c.keyVal(k) : v(c.keyVal(k));
+      if (k == kStft || k == kLtft) return [kd.name, '%', _f(raw == null ? null : (raw - 1) * 100, 1)];
+      if (k == kIgn) return [kd.name, 'deg', _f(raw, 1)];
+      return [kd.name, kd.unit, _f(raw, kd.dec)];
+    }
+    final rows = [for (final k in cfg.dash) row(k)];
     return LayoutBuilder(builder: (_, cs) {
       final listW = (cs.maxWidth * 0.2).clamp(120.0, 190.0).toDouble();
       return Row(children: [
@@ -4456,7 +4529,10 @@ class DashPage extends StatelessWidget {
             child: Column(children: [
               for (int i = 0; i < rows.length; i++)
                 Expanded(
-                  child: Container(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => pickKey(context, cfg.dash, i),
+                    child: Container(
                     decoration: BoxDecoration(border: i == rows.length - 1 ? null : const Border(bottom: BorderSide(color: Colors.white12))),
                     child: Row(children: [
                       Text(rows[i][0], style: const TextStyle(color: Color(0xFFFFE01A), fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, fontSize: 14)),
@@ -4470,6 +4546,7 @@ class DashPage extends StatelessWidget {
                         ),
                       ),
                     ]),
+                    ),
                   ),
                 ),
             ]),
