@@ -349,7 +349,11 @@ class GaugeController extends ChangeNotifier {
   LinkState link = LinkState.idle;
   bool demo = false;
   bool gpsOk = false;
-  double? gpsSpeed; // km/h
+  double? gpsSpeed; // km/h — ค่าที่โชว์ (เลื่อนนุ่มระหว่างจุด GPS)
+  double? gpsRaw;   // km/h — ค่าที่วัดได้จริง (ผ่านตัวกรองแล้ว) ใช้บันทึกความเร็วสูงสุด/DRAG
+  double _gFrom = 0, _gTo = 0;
+  int _gT0 = 0, _gDur = 1000, _gPrevFixMs = 0, _gSpikeN = 0;
+  Timer? _gpsAnim;
   double topSpeed = 0;
   final Map<String, List<double>> mm = {}; // ต่ำสุด/สูงสุดของแต่ละค่า
   String? error;
@@ -643,19 +647,57 @@ class GaugeController extends ChangeNotifier {
               intervalDuration: const Duration(milliseconds: 200),
               forceLocationManager: true,
             )
-          : const LocationSettings(accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 0);
+          : (defaultTargetPlatform == TargetPlatform.iOS
+              ? AppleSettings(
+                  accuracy: LocationAccuracy.bestForNavigation,
+                  activityType: ActivityType.automotiveNavigation,
+                  distanceFilter: 0,
+                  pauseLocationUpdatesAutomatically: false,
+                )
+              : const LocationSettings(accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 0));
       _gpsSub = Geolocator.getPositionStream(locationSettings: ls).listen((p) {
         if (demo) return; // DEMO ใช้ GPS จำลอง (ไม่ให้ GPS จริงที่จอดนิ่งมาทับ)
+        final now = DateTime.now().millisecondsSinceEpoch;
         gpsOk = true;
-        _gpsLastMs = DateTime.now().millisecondsSinceEpoch;
-        gpsSpeed = math.max(0.0, p.speed * 3.6);
+        _gpsLastMs = now;
         gpsAccM = p.accuracy;
-        spdAccKmh = p.speedAccuracy > 0 ? p.speedAccuracy * 3.6 : null;
-        // ไว้ใจ fix นี้ถ้ารัศมีตำแหน่งแม่น (≤25 ม.) และความเร็วแม่น (±≤4 กม./ชม.) — ค่า ≤0 = ชิปไม่บอก ให้ผ่าน
-        final accOk = p.accuracy <= 0 || p.accuracy <= 25;
-        final spdOk = p.speedAccuracy <= 0 || p.speedAccuracy * 3.6 <= 4;
-        _gpsTrust = accOk && spdOk;
-        _dragUpdate(gpsSpeed!, p.timestamp);
+        final saKmh = p.speedAccuracy > 0 ? p.speedAccuracy * 3.6 : 0.0;
+        spdAccKmh = saKmh > 0 ? saKmh : null;
+        // ความเร็วจากดอปเปลอร์ของชิป GPS (แม่นกว่าคำนวณจากระยะ) ; ค่าติดลบ = ชิปไม่บอก
+        double v = p.speed < 0 ? 0.0 : p.speed * 3.6;
+        // จอดนิ่ง: GPS แกว่ง 0-3 กม./ชม. -> ตัดเป็น 0
+        if (v < 2.5 || (saKmh > 0 && v < saKmh && v < 8)) v = 0;
+        // กันค่ากระโดด: รถเร่ง/เบรกจริงไม่เกิน ~1.2g (≈43 กม./ชม. ต่อวินาที) ; โดดเกินติดกัน 3 ครั้ง = ของจริง (เช่นออกจากอุโมงค์)
+        final dt = _gPrevFixMs == 0 ? 1.0 : ((now - _gPrevFixMs) / 1000.0).clamp(0.05, 5.0).toDouble();
+        bool spike = false;
+        final prev = gpsRaw;
+        if (prev != null) {
+          final maxStep = 43.0 * dt + 3.0;
+          if ((v - prev).abs() > maxStep) {
+            if (++_gSpikeN < 3) {
+              spike = true;
+              v = prev + (v > prev ? maxStep : -maxStep);
+            } else {
+              _gSpikeN = 0;
+            }
+          } else {
+            _gSpikeN = 0;
+          }
+        }
+        final interval = _gPrevFixMs == 0 ? 1000 : (now - _gPrevFixMs).clamp(80, 1500).toInt();
+        _gPrevFixMs = now;
+        gpsRaw = v;
+        // บันทึกค่าสูงสุดเฉพาะจุดที่แม่นพอ: รัศมี ≤30 ม. และความเร็ว ±≤9 กม./ชม. (ค่า ≤0 = ชิปไม่บอก ให้ผ่าน) และไม่ใช่ค่ากระโดด
+        final accOk = p.accuracy <= 0 || p.accuracy <= 30;
+        final spdOk = saKmh <= 0 || saKmh <= 9;
+        _gpsTrust = accOk && spdOk && !spike;
+        // ตัวเลขบนจอ: เลื่อนจากค่าที่โชว์อยู่ไปค่าใหม่แบบต่อเนื่องภายในช่วงเวลาระหว่างจุด GPS (ไม่โดดทีละขั้น)
+        _gFrom = gpsSpeed ?? v;
+        _gTo = v;
+        _gT0 = now;
+        _gDur = math.max(60, (interval * 0.9).round());
+        _gpsAnimStart();
+        _dragUpdate(v, p.timestamp);
         _track();
         _sendGps();
         notifyListeners();
@@ -672,10 +714,33 @@ class GaugeController extends ChangeNotifier {
             _dragFinish(); // สัญญาณ GPS หายกลางรอบ: หยุดนาฬิกา เก็บช่วงที่วัดได้
           }
           _rPrevKmh = null; // ต้องได้ค่าต่ำกว่า 5 km/h ใหม่ก่อนออกตัวรอบถัดไป
+          gpsRaw = null; // สัญญาณกลับมาใหม่ ไม่เทียบกับค่าเก่า
+          _gPrevFixMs = 0;
+          _gSpikeN = 0;
           notifyListeners();
         }
       });
     } catch (_) {}
+  }
+
+  /// อัปเดตตัวเลขความเร็วบนจอ ~30 ครั้ง/วินาที ระหว่างจุด GPS (ชิป GPS มือถือส่วนใหญ่ให้ค่าแค่ 1 ครั้ง/วินาที)
+  void _gpsAnimStart() {
+    _gpsAnim ??= Timer.periodic(const Duration(milliseconds: 33), (_) {
+      if (demo || !gpsOk) {
+        _gpsAnim?.cancel();
+        _gpsAnim = null;
+        return;
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final f = ((now - _gT0) / _gDur).clamp(0.0, 1.0).toDouble();
+      final nv = _gFrom + (_gTo - _gFrom) * f;
+      final cur = gpsSpeed;
+      if (cur == null || (nv - cur).abs() > 0.02) {
+        gpsSpeed = nv;
+        _sendGps();
+        notifyListeners();
+      }
+    });
   }
 
   /// ส่งความเร็ว GPS ไปบอร์ด TEST1: [3][u16 km/h x10] (ไม่รอตอบกลับ เพื่อให้เร็ว)
@@ -712,7 +777,7 @@ class GaugeController extends ChangeNotifier {
   double tsBest = 0;
   double? tsRpm, tsAfr;
   DateTime? tsAt;
-  double? get tsNow => demo ? gpsSpeed : (gpsOk ? gpsSpeed : null);   // วัดจาก GPS โทรศัพท์โดยตรง ไม่พึ่ง ECU
+  double? get tsNow => (demo || gpsOk) ? gpsRaw : null; // ค่าที่วัดจริง (ไม่ใช่ค่าที่เลื่อนบนจอ)   // วัดจาก GPS โทรศัพท์โดยตรง ไม่พึ่ง ECU
   String get tsSrc => (demo || gpsOk) ? 'GPS' : '--';
   void tsClear() {
     tsBest = 0; tsRpm = null; tsAfr = null; tsAt = null;
@@ -721,8 +786,8 @@ class GaugeController extends ChangeNotifier {
 
   void _track() {
     final gpsTrust = demo || _gpsTrust;             // ยอมรับเฉพาะ fix ที่แม่น จะได้ไม่บันทึกค่าสูงสุดหลอกจาก GPS กระตุก
-    final s = shownSpeed;
     final sIsGps = demo || Cfg.i.speedGps;          // ความเร็วหลักมาจาก GPS หรือไม่
+    final s = (sIsGps && !demo) ? (gpsOk ? gpsRaw : null) : shownSpeed;
     if (s != null && s > topSpeed && (!sIsGps || gpsTrust)) topSpeed = s;
     final ts = tsNow;
     if (ts != null && ts >= 1 && ts > tsBest && gpsTrust) {
@@ -1212,6 +1277,7 @@ class GaugeController extends ChangeNotifier {
           gpsOk = true;
           _gpsLastMs = DateTime.now().millisecondsSinceEpoch;
           gpsSpeed = spd < 0.5 ? 0.0 : math.max(0.0, spd + (rnd.nextDouble() - 0.5) * 0.6);
+          gpsRaw = gpsSpeed;
           gpsAccM = 3.0 + rnd.nextDouble() * 1.5;
           spdAccKmh = 0.5 + rnd.nextDouble() * 0.4;
           satTotal = 26;
@@ -1226,6 +1292,8 @@ class GaugeController extends ChangeNotifier {
       // คืนสถานะ GPS ให้ GPS จริงอัปเดตต่อ และคืน LOG DRAG เดิม
       gpsOk = false;
       gpsSpeed = null;
+      gpsRaw = null;
+      _gPrevFixMs = 0;
       gpsAccM = null;
       spdAccKmh = null;
       satUsed = null;
@@ -1262,6 +1330,7 @@ class GaugeController extends ChangeNotifier {
     _connSub?.cancel();
     _gpsSub?.cancel();
     _gpsWatch?.cancel();
+    _gpsAnim?.cancel();
     _gnssSub?.cancel();
     _dTick?.cancel();
     dragClock.dispose();
