@@ -1,0 +1,23 @@
+name: Verify XDF parser
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter test test/xdf_dump_test.dart
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xdf-digest
+          path: app/build/xdf_digest.txt

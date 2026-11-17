@@ -87,7 +87,10 @@ class LinMath {
 
 // ---------- โมเดล XDF (อ่านตามกติกา TunerPro) ----------
 // typeflags: 0x01 = signed, 0x02 = LSB first (little-endian), 0x04 = column-major
-// majorstridebits > 0 = ระยะห่างระหว่างช่อง (บิต) — ตรวจกับไฟล์จริงแล้วตรงกับ TunerPro
+// majorstridebits > 0 = ระยะห่างระหว่างช่องที่อยู่ติดกันในลำดับการเก็บ (ในแถวเดียวกัน; ถ้า column-major = ในคอลัมน์เดียวกัน)
+// minorstridebits > 0 = ระยะห่างระหว่างจุดเริ่มแต่ละแถว (column-major = แต่ละคอลัมน์)  — ตรวจกับไฟล์จริง 88 รุ่นแล้ว
+// แกน X/Y: embedinfo type 3 + linkobjid = ใช้ค่าตารางอื่น, type 1 = อ่านจาก BIN ตามที่อยู่ของแกน, ไม่มี embedinfo = LABEL คงที่
+// outputtype: 1 ทศนิยม, 2 จำนวนเต็ม, 3 เลขฐาน 16, 4 ตัวอักษร (ASCII)
 enum AxKind { none, rpm, tps }
 
 class XdfAxis {
@@ -98,14 +101,16 @@ class XdfAxis {
   final int bits;
   final bool lsb, signed;
   final LinMath math;
-  final int dp;
-  const XdfAxis(this.count, this.labels, this.link, this.address, this.bits, this.lsb, this.signed, this.math, this.dp);
+  final int? dp;            // null = ไม่ได้กำหนด
+  final String? type;       // embedinfo type ('1' จาก BIN, '3' ลิงก์)
+  final int stride;         // ไบต์ระหว่างค่า (แกนจาก BIN)
+  const XdfAxis(this.count, this.labels, this.link, this.address, this.bits, this.lsb, this.signed, this.math, this.dp, this.type, this.stride);
 }
 
 class XdfTable {
   final String id, title;
   final bool isFlag;
-  final int address, bits, rows, cols, dp, mask;
+  final int address, bits, rows, cols, dp, mask, out;
   final int elemStride, rowStride; // ไบต์
   final bool signed, lsb, colMajor;
   final LinMath math;
@@ -113,7 +118,7 @@ class XdfTable {
   final XdfAxis? x, y;
   XdfTable({
     required this.id, required this.title, required this.isFlag, required this.address, required this.bits,
-    this.rows = 1, this.cols = 1, this.dp = 0, this.mask = 0, this.elemStride = 1, this.rowStride = 0,
+    this.rows = 1, this.cols = 1, this.dp = 0, this.mask = 0, this.out = 1, this.elemStride = 1, this.rowStride = 0,
     this.signed = false, this.lsb = true, this.colMajor = false, this.math = const LinMath(1, 0),
     this.tmin = 0, this.tmax = 255, this.x, this.y,
   });
@@ -129,6 +134,13 @@ String _entities(String s) {
   s = s.replaceAllMapped(RegExp(r'&#x([0-9A-Fa-f]+);'), (m) => String.fromCharCode(int.parse(m[1]!, radix: 16)));
   s = s.replaceAllMapped(RegExp(r'&#(\d+);'), (m) => String.fromCharCode(int.parse(m[1]!)));
   return s.replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll('&apos;', "'");
+}
+
+// สมการ: ถอด entity (&#013;&#010;), ตัดช่องว่าง/ขึ้นบรรทัด, ชื่อตัวแปรใด ๆ (x, X1. ฯลฯ) = ค่าดิบ X
+String _eq(String? e) {
+  var s = _entities(e ?? 'X').replaceAll(RegExp(r'[\r\n\t]'), ' ').trim();
+  s = s.replaceAll(RegExp(r'(?<![0-9.])[A-Za-z_][A-Za-z0-9_]*\.?(?![0-9])'), 'X');
+  return s.isEmpty ? 'X' : s;
 }
 
 String? _attr(String src, String name) => RegExp('$name="([^"]*)"').firstMatch(src)?.group(1);
@@ -147,10 +159,10 @@ class XdfDoc {
 
   static XdfDoc parse(String xml) {
     // ค่าเริ่มต้นจาก <DEFAULTS>
-    final dm = RegExp(r'<DEFAULTS([^>]*)>').firstMatch(xml)?.group(1) ?? '';
-    final defLsb = (_attr(dm, 'lsbfirst') ?? '0') == '1';
-    final defSigned = (_attr(dm, 'signed') ?? '0') == '1';
-    final defBits = int.tryParse(_attr(dm, 'datasizeinbits') ?? '8') ?? 8;
+    // TunerPro: <DEFAULTS> เป็นแค่ค่าเริ่มต้นตอนสร้างตารางใหม่ใน editor — ตอนอ่านไฟล์ ถ้าไม่มี typeflags = MSB first, unsigned, 8 บิต
+    const defLsb = false;
+    const defSigned = false;
+    const defBits = 8;
 
     String title(String t) {
       final raw = RegExp(r'<title>([\s\S]*?)</title>').firstMatch(t)?.group(1)?.trim() ?? '';
@@ -164,7 +176,10 @@ class XdfDoc {
       final a = am.group(0)!;
       final ed = RegExp(r'<EMBEDDEDDATA([^>]*)>').firstMatch(a)?.group(1) ?? '';
       final cnt = int.tryParse(RegExp(r'<indexcount>(\d+)').firstMatch(a)?.group(1) ?? '') ?? 0;
-      final link = RegExp(r'<embedinfo[^>]*linkobjid="([^"]*)"').firstMatch(a)?.group(1);
+      final ei = RegExp(r'<embedinfo\s+type="(\d+)"').firstMatch(a)?.group(1);
+      final link = ei == '3' ? RegExp(r'<embedinfo[^>]*linkobjid="([^"]*)"').firstMatch(a)?.group(1) : null;
+      final abits = (int.tryParse(_attr(ed, 'mmedelementsizebits') ?? '') ?? defBits).abs();
+      final amaj = int.tryParse(_attr(ed, 'mmedmajorstridebits') ?? '') ?? 0;
       final labs = <int, String>{};
       for (final m in RegExp(r'<LABEL\s+index="(\d+)"\s+value="([^"]*)"').allMatches(a)) {
         labs[int.parse(m[1]!)] = decodeTis620(_entities(m[2]!));
@@ -172,11 +187,13 @@ class XdfDoc {
       final n = cnt > 0 ? cnt : (labs.isEmpty ? 1 : labs.keys.reduce((p, q) => p > q ? p : q) + 1);
       final tf = _hex(_attr(ed, 'mmedtypeflags'));
       return XdfAxis(
-        n, [for (int i = 0; i < n; i++) labs[i] ?? ''], link, _hex(_attr(ed, 'mmedaddress')),
-        (int.tryParse(_attr(ed, 'mmedelementsizebits') ?? '') ?? defBits).abs(),
+        n, labs.isEmpty ? [for (int i = 0; i < n; i++) '${i + 1}'] : [for (int i = 0; i < n; i++) labs[i] ?? ''],
+        link, ei == '1' ? _hex(_attr(ed, 'mmedaddress')) : null,
+        abits,
         tf == null ? defLsb : (tf & 2) != 0, tf == null ? defSigned : (tf & 1) != 0,
-        LinMath.fromEq(_attr(a, 'equation') ?? 'X'),
-        int.tryParse(RegExp(r'<decimalpl>(-?\d+)').firstMatch(a)?.group(1) ?? '') ?? 2,
+        LinMath.fromEq(_eq(_attr(a, 'equation'))),
+        int.tryParse(RegExp(r'<decimalpl>(-?\d+)').firstMatch(a)?.group(1) ?? ''),
+        ei, amaj > 0 ? math.max(1, amaj ~/ 8) : math.max(1, abits ~/ 8),
       );
     }
 
@@ -211,16 +228,18 @@ class XdfDoc {
       final major = int.tryParse(_attr(ed, 'mmedmajorstridebits') ?? '') ?? 0;
       final minor = int.tryParse(_attr(ed, 'mmedminorstridebits') ?? '') ?? 0;
       final es = major > 0 ? math.max(1, major ~/ 8) : math.max(1, bits ~/ 8);
+      final ot = int.tryParse(RegExp(r'<outputtype>(\d+)').firstMatch(z)?.group(1) ?? '') ?? 1;
       final mn = double.tryParse(RegExp(r'<min>([^<]*)</min>').firstMatch(z)?.group(1) ?? '') ?? 0;
       final mx = double.tryParse(RegExp(r'<max>([^<]*)</max>').firstMatch(z)?.group(1) ?? '') ?? 255;
       out.add(XdfTable(
         id: id, title: title(t), isFlag: false, address: addr, bits: bits, rows: rc, cols: cc,
-        dp: int.tryParse(RegExp(r'<decimalpl>(-?\d+)').firstMatch(z)?.group(1) ?? '') ?? 2,
+        dp: ot == 2 ? 0 : (int.tryParse(RegExp(r'<decimalpl>(-?\d+)').firstMatch(z)?.group(1) ?? '') ?? 2),
+        out: ot,
         elemStride: es, rowStride: minor > 0 ? math.max(1, minor ~/ 8) : 0,
         signed: tf == null ? defSigned : (tf & 1) != 0,
         lsb: tf == null ? defLsb : (tf & 2) != 0,
         colMajor: tf != null && (tf & 4) != 0,
-        math: LinMath.fromEq(_attr(z, 'equation') ?? 'X'), tmin: mn, tmax: mx,
+        math: LinMath.fromEq(_eq(_attr(z, 'equation'))), tmin: mn, tmax: mx,
         x: axis(t, 'x'), y: axis(t, 'y'),
       ));
     }
@@ -257,14 +276,43 @@ class BinTable {
   int get rows => t.rows;
   int get cols => t.cols;
   int _off(int r, int c) {
-    if (t.rowStride > 0) return t.address + r * t.rowStride + c * t.elemStride;
-    final lin = t.colMajor ? c * t.rows + r : r * t.cols + c;
-    return t.address + lin * t.elemStride;
+    final es = t.elemStride;
+    final eb = math.max(1, t.bits ~/ 8);
+    // แถว/คอลัมน์ถัดไปเริ่มต่อจากไบต์สุดท้ายของค่าสุดท้าย: (n-1)*stride + ขนาดค่า  (ตารางสลับค่ากับจุดแบ่ง เช่น องศาฉีด)
+    if (t.colMajor) {
+      final cs = t.rowStride > 0 ? t.rowStride : (t.rows - 1) * es + eb;
+      return t.address + c * cs + r * es;
+    }
+    final rs = t.rowStride > 0 ? t.rowStride : (t.cols - 1) * es + eb;
+    return t.address + r * rs + c * es;
   }
   int raw(int r, int c) => _readRaw(bin, _off(r, c), t.bits, t.lsb, t.signed);
   double disp(int r, int c) => t.math.toDisp(raw(r, c));
   void setDisp(int r, int c, double d) => _writeRaw(bin, _off(r, c), t.bits, t.lsb, t.math.toRaw(d, t.bits, t.signed));
-  String fmt(double v) => v.toStringAsFixed(t.dp.clamp(0, 6));
+  String fmt(double v) {
+    switch (t.out) {
+      case 2: return v.round().toString();
+      case 3: {
+        final n = v.round() & ((1 << t.bits) - 1);
+        return n.toRadixString(16).toUpperCase().padLeft(math.max(1, t.bits ~/ 4), '0');
+      }
+      case 4: {
+        final n = v.round() & ((1 << t.bits) - 1);
+        final cs = <int>[for (int i = t.bits ~/ 8 - 1; i >= 0; i--) (n >> (8 * i)) & 0xFF];
+        return String.fromCharCodes(cs.map((c) => (c >= 32 && c < 127) ? c : 46));
+      }
+      default: return v.toStringAsFixed(t.dp.clamp(0, 6));
+    }
+  }
+  // แปลงข้อความที่ผู้ใช้พิมพ์ -> ค่าแสดงผล (ฐาน 16 รองรับ 0x / ตัวอักษร)
+  double? parseIn(String s) {
+    s = s.trim();
+    if (t.out == 3 || s.toLowerCase().startsWith('0x')) {
+      final h = int.tryParse(s.toLowerCase().replaceFirst('0x', ''), radix: 16);
+      return h?.toDouble();
+    }
+    return double.tryParse(s);
+  }
   // ค่าทั้งหมดเรียงตามลำดับ (ใช้เป็นหัวแกนของตารางอื่น)
   List<double> flat() => [for (int i = 0; i < t.count; i++) disp(t.cols == 1 ? i : i ~/ t.cols, t.cols == 1 ? 0 : i % t.cols)];
   // FLAG
@@ -296,17 +344,17 @@ AxisView _axisView(XdfDoc doc, Uint8List bin, XdfAxis? a, int n) {
     if (lt != null && !lt.isFlag) {
       final bt = BinTable(bin, lt);
       final v = bt.flat();
+      String f(double x) => a.dp != null && lt.out == 1 ? x.toStringAsFixed(a.dp!.clamp(0, 6)) : bt.fmt(x);
       return AxisView(
-        [for (int i = 0; i < n; i++) i < v.length ? bt.fmt(v[i]) : '$i'],
+        [for (int i = 0; i < n; i++) i < v.length ? f(v[i]) : '$i'],
         [for (int i = 0; i < n; i++) i < v.length ? v[i] : null],
         _kindOf(lt.title),
       );
     }
   }
-  if (a != null && a.address != null) {
-    final st = math.max(1, a.bits ~/ 8);
-    final v = [for (int i = 0; i < n; i++) a.math.toDisp(_readRaw(bin, a.address! + i * st, a.bits, a.lsb, a.signed))];
-    return AxisView([for (final x in v) x.toStringAsFixed(a.dp.clamp(0, 6))], v, AxKind.none);
+  if (a != null && a.type == '1' && a.address != null) {
+    final v = [for (int i = 0; i < n; i++) a.math.toDisp(_readRaw(bin, a.address! + i * a.stride, a.bits, a.lsb, a.signed))];
+    return AxisView([for (final x in v) x.toStringAsFixed((a.dp ?? 0).clamp(0, 6))], v, AxKind.none);
   }
   final labs = a?.labels ?? const <String>[];
   final text = [for (int i = 0; i < n; i++) i < labs.length ? labs[i] : '${i + 1}'];
@@ -423,8 +471,8 @@ class _TunePageState extends State<TunePage> {
       builder: (d) => AlertDialog(
         backgroundColor: const Color(0xFF12161C),
         title: Text('ตั้งค่า (${sel.length} ช่อง)', style: const TextStyle(color: Colors.white)),
-        content: TextField(controller: ctl, keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true), autofocus: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'ค่าใหม่')),
-        actions: [TextButton(onPressed: () => Navigator.pop(d), child: const Text('ยกเลิก')), TextButton(onPressed: () => Navigator.pop(d, double.tryParse(ctl.text)), child: const Text('ตั้งค่า'))],
+        content: TextField(controller: ctl, keyboardType: t.out == 3 ? TextInputType.text : const TextInputType.numberWithOptions(decimal: true, signed: true), autofocus: true, style: const TextStyle(color: Colors.white), decoration: const InputDecoration(hintText: 'ค่าใหม่')),
+        actions: [TextButton(onPressed: () => Navigator.pop(d), child: const Text('ยกเลิก')), TextButton(onPressed: () => Navigator.pop(d, bt.parseIn(ctl.text)), child: const Text('ตั้งค่า'))],
       ),
     );
     if (v != null) _edit((r, c) => bt.setDisp(r, c, v));
@@ -859,4 +907,18 @@ class _SurfPainter extends CustomPainter {
   }
   @override
   bool shouldRepaint(_SurfPainter o) => true;
+}
+
+// ---------- ใช้ตรวจสอบความถูกต้อง (เทียบกับสคริปต์อ้างอิง) : สรุปค่าทุกพารามิเตอร์ ----------
+List<String> xdfDigest(XdfDoc doc, Uint8List bin) {
+  final out = <String>[];
+  for (final t in doc.items) {
+    final bt = BinTable(bin, t);
+    if (t.isFlag) { out.add('${t.id}|F|${bt.flag ? 1 : 0}'); continue; }
+    double s = 0;
+    for (int r = 0; r < t.rows; r++) { for (int c = 0; c < t.cols; c++) { s += bt.disp(r, c); } }
+    final xa = _axisView(doc, bin, t.x, t.cols), ya = _axisView(doc, bin, t.y, t.rows);
+    out.add('${t.id}|${t.rows}x${t.cols}|${s.toStringAsFixed(2)}|${bt.fmt(bt.disp(0, 0))}|${bt.fmt(bt.disp(t.rows - 1, t.cols - 1))}|${xa.text.first}|${xa.text.last}|${ya.text.first}|${ya.text.last}');
+  }
+  return out;
 }
