@@ -3,6 +3,9 @@ name: Verify XDF parser
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -17,7 +20,9 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter test test/xdf_dump_test.dart
-      - uses: actions/upload-artifact@v4
-        with:
-          name: xdf-digest
-          path: app/build/xdf_digest.txt
+      - name: Publish digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view xdf-verify >/dev/null 2>&1 || gh release create xdf-verify --title "xdf-verify (internal)" --notes "digest for parser verification" --prerelease
+          gh release upload xdf-verify build/xdf_digest.txt --clobber
