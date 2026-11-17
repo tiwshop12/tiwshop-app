@@ -1,409 +1,1506 @@
 [
- {
-  "part": "K03-H01",
-  "model": "WAVE110I 2014",
-  "grid": "25x29",
-  "size": "64K",
-  "xdf": "K03H01.xdf",
-  "bins": [
-   {
-    "file": "K03H01_0.bin",
-    "name": "K03-H01 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K03-T61",
-  "model": "WAVE110I 2014",
-  "grid": "25x29",
-  "size": "48K",
-  "xdf": "K03T61.xdf",
-  "bins": [
-   {
-    "file": "K03T61_0.bin",
-    "name": "K03-T61 4000-9FEF.bin"
-   }
-  ]
- },
- {
-  "part": "K26-901",
-  "model": "MSX 2013",
-  "grid": "25x29",
-  "size": "48K",
-  "xdf": "K26901.xdf",
-  "bins": [
-   {
-    "file": "K26901_0.bin",
-    "name": "K26 901 4000-9FEF.bin"
-   }
-  ]
- },
- {
-  "part": "K26-911",
-  "model": "MSX",
-  "grid": "25x29",
-  "size": "48K",
-  "xdf": "K26911.xdf",
-  "bins": [
-   {
-    "file": "K26911_0.bin",
-    "name": "K26-911 4000-9FEF.bin"
-   }
-  ]
- },
- {
-  "part": "K26-B02",
-  "model": "MSX 2016",
-  "grid": "25x29",
-  "size": "64K",
-  "xdf": "K26B02.xdf",
-  "bins": [
-   {
-    "file": "K26B02_0.bin",
-    "name": "K26-B02 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K26-B13",
-  "model": "MSX 2017-2019",
-  "grid": "25x29",
-  "size": "64K",
-  "xdf": "K26B13.xdf",
-  "bins": [
-   {
-    "file": "K26B13_0.bin",
-    "name": "38770-K26-B13 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K2J-T01",
-  "model": "WAVE110I LED 2021",
-  "grid": "29x29",
-  "size": "64K",
-  "xdf": "K2JT01.xdf",
-  "bins": [
-   {
-    "file": "K2JT01_0.bin",
-    "name": "K2J-T01 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K3F-T01",
-  "model": "WAVE125I 2022-2023",
-  "grid": "29x29",
-  "size": "64K",
-  "xdf": "K3FT01.xdf",
-  "bins": [
-   {
-    "file": "K3FT01_0.bin",
-    "name": "38770-K3F-T01 125wave2022-23 ล่าสุด.bin"
-   }
-  ]
- },
- {
-  "part": "K58-T81",
-  "model": "WAVE110I 2017",
-  "grid": "25x29",
-  "size": "64K",
-  "xdf": "K58T81.xdf",
-  "bins": [
-   {
-    "file": "K58T81_0.bin",
-    "name": "K58-T81 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K58-TC0",
-  "model": "WAVE110I LED 2019",
-  "grid": "25x29",
-  "size": "64K",
-  "xdf": "K58TC0.xdf",
-  "bins": [
-   {
-    "file": "K58TC0_0.bin",
-    "name": "K58-TC0 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K58-TC2",
-  "model": "WAVE110I LED 2020",
-  "grid": "29x29",
-  "size": "64K",
-  "xdf": "K58TC2.xdf",
-  "bins": [
-   {
-    "file": "K58TC2_0.bin",
-    "name": "K58-TC2 8000-0 RPM 12000 หอบยิง.bin"
-   },
-   {
-    "file": "K58TC2_1.bin",
-    "name": "K58-TC2 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K58M-TC1",
-  "model": "WAVE110I",
-  "grid": "29x29",
-  "size": "64K",
-  "xdf": "K58MTC1.xdf",
-  "bins": [
-   {
-    "file": "K58MTC1_0.bin",
-    "name": "38770-K58M-TC1 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K73-M62",
-  "model": "WAVE125I LED 2019",
-  "grid": "25x29",
-  "size": "64K",
-  "xdf": "K73M62.xdf",
-  "bins": [
-   {
-    "file": "K73M62_0.bin",
-    "name": "38770-K73-M62 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K73-T32",
-  "model": "WAVE125I 2017",
-  "grid": "25x29",
-  "size": "64K",
-  "xdf": "K73T32.xdf",
-  "bins": [
-   {
-    "file": "K73T32_0.bin",
-    "name": "K73-T32 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K73-T61",
-  "model": "WAVE125I LED 2020",
-  "grid": "29x29",
-  "size": "64K",
-  "xdf": "K73T61.xdf",
-  "bins": [
-   {
-    "file": "K73T61_0.bin",
-    "name": "K73-T61 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K73-TC2",
-  "model": "WAVE125I LED",
-  "grid": "29x29",
-  "size": "64K",
-  "xdf": "K73TC2.xdf",
-  "bins": [
-   {
-    "file": "K73TC2_0.bin",
-    "name": "K73-TC2 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K76-T61",
-  "model": "DREAM110I LED 2019",
-  "grid": "25x29",
-  "size": "64K",
-  "xdf": "K76T61.xdf",
-  "bins": [
-   {
-    "file": "K76T61_0.bin",
-    "name": "38770-K76-T61 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K76-T62",
-  "model": "DREAM110I LED 2019",
-  "grid": "25x29",
-  "size": "64K",
-  "xdf": "K76T62.xdf",
-  "bins": [
-   {
-    "file": "K76T62_0.bin",
-    "name": "K76-T62 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K90-V03",
-  "model": "รถนอก",
-  "grid": "25x29",
-  "size": "64K",
-  "xdf": "K90V03.xdf",
-  "bins": [
-   {
-    "file": "K90V03_0.bin",
-    "name": "K90-V03_8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "K94-T02",
-  "model": "CBR 150R",
-  "grid": "29x29",
-  "size": "96K",
-  "xdf": "K94T02.xdf",
-  "bins": [
-   {
-    "file": "K94T02_0.bin",
-    "name": "K94-T02-CB150_8000-1FFFF.bin"
-   }
-  ]
- },
- {
-  "part": "KPP-T03",
-  "model": "CBR 150R",
-  "grid": "22x29",
-  "size": "56K",
-  "xdf": "KPPT03.xdf",
-  "bins": [
-   {
-    "file": "KPPT03_0.bin",
-    "name": "38770-KPP-T03-CBR_150 0-DFEF.bin"
-   }
-  ]
- },
- {
-  "part": "KVB-S53",
-  "model": "CLICK 110I",
-  "grid": "25x29",
-  "size": "48K",
-  "xdf": "KVBS53.xdf",
-  "bins": [
-   {
-    "file": "KVBS53_0.bin",
-    "name": "KVB-S53 4000-9FEF.bin"
-   }
-  ]
- },
- {
-  "part": "KWW-601",
-  "model": "WAVE110I เรือนตั้งตัวแรก",
-  "grid": "18x26",
-  "size": "56K",
-  "xdf": "KWW601.xdf",
-  "bins": [
-   {
-    "file": "KWW601_0.bin",
-    "name": "KWW-601 0-7FEF.bin"
-   }
-  ]
- },
- {
-  "part": "KWW-642",
-  "model": "WAVE110I 2014",
-  "grid": "25x29",
-  "size": "48K",
-  "xdf": "KWW642.xdf",
-  "bins": [
-   {
-    "file": "KWW642_0.bin",
-    "name": "38770-KWW-642 4000-9FEF.bin"
-   }
-  ]
- },
- {
-  "part": "KWW-643",
-  "model": "WAVE110I 2014",
-  "grid": "25x29",
-  "size": "48K",
-  "xdf": "KWW643.xdf",
-  "bins": [
-   {
-    "file": "KWW643_0.bin",
-    "name": "KWW-643 4000-9FEF.bin"
-   }
-  ]
- },
- {
-  "part": "KYL-T01",
-  "model": "ไฟเลี้ยวบังลม",
-  "grid": "18x26",
-  "size": "56K",
-  "xdf": "KYLT01.xdf",
-  "bins": [
-   {
-    "file": "KYLT01_0.bin",
-    "name": "38770-KYL-T01 0-7FEF.bin"
-   }
-  ]
- },
- {
-  "part": "KYT-901",
-  "model": "สกุปปี่",
-  "grid": "22x29",
-  "size": "56K",
-  "xdf": "KYT901.xdf",
-  "bins": [
-   {
-    "file": "KYT901_0.bin",
-    "name": "scoopy KYT-901 0-7FEF.bin"
-   }
-  ]
- },
- {
-  "part": "KYZ-T03",
-  "model": "WAVE125I 2012",
-  "grid": "25x29",
-  "size": "48K",
-  "xdf": "KYZT03.xdf",
-  "bins": [
-   {
-    "file": "KYZT03_0.bin",
-    "name": "KYZ-T03 4000-9FEF.bin"
-   }
-  ]
- },
- {
-  "part": "KYZ-T41",
-  "model": "WAVE125I",
-  "grid": "25x29",
-  "size": "64K",
-  "xdf": "KYZT41.xdf",
-  "bins": [
-   {
-    "file": "KYZT41_0.bin",
-    "name": "KYZ-T41 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "KZV-A61",
-  "model": "DREAM110I 2017",
-  "grid": "25x29",
-  "size": "64K",
-  "xdf": "KZVA61.xdf",
-  "bins": [
-   {
-    "file": "KZVA61_0.bin",
-    "name": "KZV-A61 8000-0.bin"
-   }
-  ]
- },
- {
-  "part": "KZV-T03",
-  "model": "DREAM110I 2017",
-  "grid": "25x29",
-  "size": "48K",
-  "xdf": "KZVT03.xdf",
-  "bins": [
-   {
-    "file": "KZVT03_0.bin",
-    "name": "38770-KZV-t03 4000-9FEF.bin"
-   }
-  ]
- }
+{
+"part": "K0WF-T01",
+"family": "ADV",
+"title": "30400-K0WF-T01_01037C0D01_ADV150_2017-2019",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "01037C0D01",
+"xdf": "m00.xdf",
+"items": 15,
+"bins": [
+{
+"file": "m00_0.bin",
+"name": "BIN_30400-K0WF-T01_01037C0D01.bin"
+}
+]
+},
+{
+"part": "K12M-J61",
+"family": "LEAD",
+"title": "30400-K12M-J61-J01-LEAD125-2V",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "",
+"xdf": "m01.xdf",
+"items": 21,
+"bins": [
+{
+"file": "m01_0.bin",
+"name": "K12M-J61-J01 2V.bin"
+}
+]
+},
+{
+"part": "K1ZF-T01",
+"family": "PCX",
+"title": "30400-K1ZF-T01_0103D00D01_PCX160_2020-2021",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "0103D00D01",
+"xdf": "m02.xdf",
+"items": 33,
+"bins": [
+{
+"file": "m02_0.bin",
+"name": "BIN_30400-K1ZF-T01_0103D00D01.bin"
+}
+]
+},
+{
+"part": "K1ZF-T11",
+"family": "PCX",
+"title": "30400-K1ZF-T11_0103CF0D01_PCX160_2020-2021",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "0103CF0D01",
+"xdf": "m03.xdf",
+"items": 33,
+"bins": [
+{
+"file": "m03_0.bin",
+"name": "BIN_30400-K1ZF-T11_0103CF0D01.bin"
+}
+]
+},
+{
+"part": "K1ZP-T51",
+"family": "PCX",
+"title": "30400-K1ZP-T51_0105050D01_PCX160-2023",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "0105050D01",
+"xdf": "m04.xdf",
+"items": 59,
+"bins": [
+{
+"file": "m04_0.bin",
+"name": "K1ZP-T51-TH01-PCX160-2023-oir.bin"
+},
+{
+"file": "m04_1.bin",
+"name": "K1ZP-T51-TH01-PCX160-2023.bin"
+}
+]
+},
+{
+"part": "K1ZT-TC1",
+"family": "PCX",
+"title": "30400-K1ZT-TC1 0105B30D01 PCX160 2025",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "0105B30D01",
+"xdf": "m05.xdf",
+"items": 61,
+"bins": [
+{
+"file": "m05_0.bin",
+"name": "30400-K1ZT-TC1 0105B30D01 PCX160 2025.bin"
+}
+]
+},
+{
+"part": "K1ZT-TC2",
+"family": "PCX",
+"title": "30400-K1ZT-TC2_PCX_2026 0105B30D02",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "0105B30D02",
+"xdf": "m06.xdf",
+"items": 61,
+"bins": [
+{
+"file": "m06_0.bin",
+"name": "30400-K1ZT-TC2_PCX_2026 0105B30D02.bin"
+}
+]
+},
+{
+"part": "K1ZT-TF1",
+"family": "PCX",
+"title": "30400-K1ZT-TF1 0105B40D01 PCX160 2025",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "0105B40D01",
+"xdf": "m07.xdf",
+"items": 61,
+"bins": [
+{
+"file": "m07_0.bin",
+"name": "30400-K1ZT-TF1 0105B40D01 PCX160 2025.bin"
+}
+]
+},
+{
+"part": "K20J-T21",
+"family": "ZOOMER-X",
+"title": "30400-K20J-T21_0101FF0D01_Zoomer-X_2015-2017",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "0101FF0D01",
+"xdf": "m08.xdf",
+"items": 12,
+"bins": [
+{
+"file": "m08_0.bin",
+"name": "BIN_30400-K20J-T21_0101FF0D01.bin"
+}
+]
+},
+{
+"part": "K2F-T01",
+"family": "SCOOPY-I",
+"title": "30400-K2F-T01",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m09.xdf",
+"items": 37,
+"bins": [
+{
+"file": "m09_0.bin",
+"name": "K2F-T01.bin"
+}
+]
+},
+{
+"part": "K2F-T21",
+"family": "SCOOPY-I",
+"title": "30400-K2F-T21",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m10.xdf",
+"items": 37,
+"bins": [
+{
+"file": "m10_0.bin",
+"name": "30400-K2F-T21.bin"
+}
+]
+},
+{
+"part": "K2F-T91",
+"family": "SCOOPY-I",
+"title": "30400-K2F-T91",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m11.xdf",
+"items": 37,
+"bins": [
+{
+"file": "m11_0.bin",
+"name": "30400-K2F-T91.bin"
+}
+]
+},
+{
+"part": "K2SF-T01",
+"family": "CLICK",
+"title": "30400-K2SF-T01-CLICK160",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m12.xdf",
+"items": 20,
+"bins": [
+{
+"file": "m12_0.bin",
+"name": "K2SF-T01-CLICK160.bin"
+}
+]
+},
+{
+"part": "K2TA-T02",
+"family": "LEAD",
+"title": "30400-K2TA-T02_TH-01 ORI 0104780D01",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "0104780D01",
+"xdf": "m13.xdf",
+"items": 49,
+"bins": [
+{
+"file": "m13_0.bin",
+"name": "30400-K2TA-T02_TH-01 ORI 0104780D01.bin"
+}
+]
+},
+{
+"part": "K2TG-T21",
+"family": "LEAD",
+"title": "30400-K2TG-T21-TH1-LEAD",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m14.xdf",
+"items": 45,
+"bins": [
+{
+"file": "m14_0.bin",
+"name": "30400-K2TG-T21-TH1-LEAD.bin"
+}
+]
+},
+{
+"part": "K2TK-T51",
+"family": "LEAD",
+"title": "30400-K2TK-T51-TH11 LEAD ABS 2026 ID 0106900D11",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "0106900D11",
+"xdf": "m15.xdf",
+"items": 34,
+"bins": [
+{
+"file": "m15_0.bin",
+"name": "30400-K2TK-T51-TH11 LEAD ABS 2026 ID 0106900D11.bin"
+}
+]
+},
+{
+"part": "K36F-T01",
+"family": "PCX",
+"title": "30400-K36F-T01_0101990D01_PCX150_2014-2015",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "0101990D01",
+"xdf": "m16.xdf",
+"items": 36,
+"bins": [
+{
+"file": "m16_0.bin",
+"name": "BIN_30400-K36F-T01_0101990D01.bin"
+}
+]
+},
+{
+"part": "K36S-T31",
+"family": "PCX",
+"title": "30400-K36S-T31_0102180D01_PCX150_2016-2017",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "0102180D01",
+"xdf": "m17.xdf",
+"items": 42,
+"bins": [
+{
+"file": "m17_0.bin",
+"name": "BIN_30400-K36S-T31_0102180D01.bin"
+}
+]
+},
+{
+"part": "K3MF-T01",
+"family": "GIORNO",
+"title": "30400-K3MF-T01_01052A0D01_Gionro 125",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "01052A0D01",
+"xdf": "m18.xdf",
+"items": 39,
+"bins": [
+{
+"file": "m18_0.bin",
+"name": "K3MF-T01.bin"
+}
+]
+},
+{
+"part": "K3MH-T71",
+"family": "GIORNO",
+"title": "30400-K3MH-T71-TH 01 Gionro 125",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m19.xdf",
+"items": 46,
+"bins": [
+{
+"file": "m19_0.bin",
+"name": "30400-K3MH-T71-TH 01.bin"
+}
+]
+},
+{
+"part": "K59K-T11",
+"family": "CLICK",
+"title": "30400-K59K-T11_0103070D01_Click150_2018-2020",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "0103070D01",
+"xdf": "m20.xdf",
+"items": 49,
+"bins": [
+{
+"file": "m20_0.bin",
+"name": "BIN_30400-K59K-T11_0103070D01.bin"
+}
+]
+},
+{
+"part": "K60F-T01",
+"family": "CLICK",
+"title": "30400-K60F-T01_0101D00D01_Click125_2014-2015",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "0101D00D01",
+"xdf": "m21.xdf",
+"items": 18,
+"bins": [
+{
+"file": "m21_0.bin",
+"name": "BIN_30400-K60F-T01_0101D00D01 ตัวอย่าง.bin"
+},
+{
+"file": "m21_1.bin",
+"name": "BIN_30400-K60F-T01_0101D00D01MOdifly.bin"
+},
+{
+"file": "m21_2.bin",
+"name": "K60F-T01ตัวอย่างเดินหอบ.bin"
+}
+]
+},
+{
+"part": "K60S-T71",
+"family": "CLICK",
+"title": "30400-K60S-T71_01030A0D01_Click125_2016-2017",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "01030A0D01",
+"xdf": "m22.xdf",
+"items": 19,
+"bins": [
+{
+"file": "m22_0.bin",
+"name": "BIN_30400-K60S-T71_01030A0D01 modifly.bin"
+},
+{
+"file": "m22_1.bin",
+"name": "BIN_30400-K60S-T71_01030A0D01.bin"
+}
+]
+},
+{
+"part": "K93-T01",
+"family": "SCOOPY-I",
+"title": "30400-K93-T01",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m23.xdf",
+"items": 24,
+"bins": [
+{
+"file": "m23_0.bin",
+"name": "30400-K93-T01-1.bin"
+}
+]
+},
+{
+"part": "K93-T21",
+"family": "SCOOPY-I",
+"title": "30400-K93-T21",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m24.xdf",
+"items": 9,
+"bins": [
+{
+"file": "m24_0.bin",
+"name": "30400-K93-T21 .bin"
+}
+]
+},
+{
+"part": "K97F-T01",
+"family": "PCX",
+"title": "30400-K97F-T01_0102990D01_PCX150_2017-2019",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "0102990D01",
+"xdf": "m25.xdf",
+"items": 37,
+"bins": [
+{
+"file": "m25_0.bin",
+"name": "K97F-T01-smk ออริปลด.bin"
+},
+{
+"file": "m25_1.bin",
+"name": "K97F-T01-smk.bin"
+},
+{
+"file": "m25_2.bin",
+"name": "K97F_T01_TH01.bin"
+}
+]
+},
+{
+"part": "K0B-T01",
+"family": "FORZA300",
+"title": "38770-K0B-T01-FORZA300-NEW-2018-2020",
+"brand": "Keihin",
+"size": "512K",
+"ecm": "",
+"xdf": "",
+"items": 0,
+"bins": [
+{
+"file": "m26_0.bin",
+"name": "38770-K0B-T01-FORZA300-NEW-2018-2020.bin"
+}
+]
+},
+{
+"part": "K0F-T01",
+"family": "MONKEY",
+"title": "38770-K0F-T01 มั้งกี้",
+"brand": "Keihin",
+"size": "96K",
+"ecm": "",
+"xdf": "m27.xdf",
+"items": 27,
+"bins": [
+{
+"file": "m27_0.bin",
+"name": "k0F-T01.bin"
+}
+]
+},
+{
+"part": "K0F-T61",
+"family": "MONKEY",
+"title": "38770-K0F-T61",
+"brand": "Keihin",
+"size": "96K",
+"ecm": "",
+"xdf": "m28.xdf",
+"items": 28,
+"bins": [
+{
+"file": "m28_0.bin",
+"name": "38770-kof-t61 8000-0.bin"
+}
+]
+},
+{
+"part": "K0G-902",
+"family": "C125",
+"title": "38770-K0G-902-C125",
+"brand": "Keihin",
+"size": "96K",
+"ecm": "",
+"xdf": "",
+"items": 0,
+"bins": [
+{
+"file": "m29_0.bin",
+"name": "38700-K0G-902 .bin"
+}
+]
+},
+{
+"part": "K1M-T01",
+"family": "DREAM110I",
+"title": "38770-K1M-T01 ดรีม",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m30.xdf",
+"items": 42,
+"bins": [
+{
+"file": "m30_0.bin",
+"name": "38770-K1M-T01.bin"
+},
+{
+"file": "m30_1.bin",
+"name": "38770-K1M-T31.bin"
+}
+]
+},
+{
+"part": "K1M-T31",
+"family": "DREAM110I",
+"title": "38770-K1M-T31",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "",
+"items": 0,
+"bins": [
+{
+"file": "m31_0.bin",
+"name": "38770-K1M-T31.bin"
+}
+]
+},
+{
+"part": "K2E-T02",
+"family": "CT125",
+"title": "38770-K2E-T02 CT125",
+"brand": "Keihin",
+"size": "96K",
+"ecm": "",
+"xdf": "m32.xdf",
+"items": 29,
+"bins": [
+{
+"file": "m32_0.bin",
+"name": "38770-K2E-T02.bin"
+}
+]
+},
+{
+"part": "K2E-T32",
+"family": "CT125",
+"title": "38770-K2E-T32",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m33.xdf",
+"items": 36,
+"bins": [
+{
+"file": "m33_0.bin",
+"name": "38770-K2E-T32 .bin"
+}
+]
+},
+{
+"part": "K2J-TH1",
+"family": "WAVE110I",
+"title": "38770-K2J-TH1 110i",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m34.xdf",
+"items": 42,
+"bins": [
+{
+"file": "m34_0.bin",
+"name": "38770-K2J-TH1-oir.bin"
+}
+]
+},
+{
+"part": "K2J-TQ1",
+"family": "WAVE110I",
+"title": "38770-K2J-TQ1 WAVE110 2026 01062C0D01ORI",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "01062C0D01",
+"xdf": "m35.xdf",
+"items": 42,
+"bins": [
+{
+"file": "m35_0.bin",
+"name": "38770-K2J-TQ1 WAVE110 2026 01062C0D01ORI.bin"
+}
+]
+},
+{
+"part": "K2W-T01",
+"family": "DAX125",
+"title": "38770-K2W-T01-DAX-125",
+"brand": "Keihin",
+"size": "96K",
+"ecm": "",
+"xdf": "m36.xdf",
+"items": 35,
+"bins": [
+{
+"file": "m36_0.bin",
+"name": "38770-K2W-T01-IDECM-0104540D01.bin"
+}
+]
+},
+{
+"part": "K3F-T41",
+"family": "WAVE125I",
+"title": "38770-K3F-T41 wave125",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m37.xdf",
+"items": 35,
+"bins": [
+{
+"file": "m37_0.bin",
+"name": "38770-K3F-T41.bin"
+}
+]
+},
+{
+"part": "KZV-T02",
+"family": "DREAM110I",
+"title": "38770-KZV-T02",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m38.xdf",
+"items": 22,
+"bins": [
+{
+"file": "m38_0.bin",
+"name": "38770-KZV-T02.bin"
+}
+]
+},
+{
+"part": "K0WM-TA1",
+"family": "ADV",
+"title": "ADV160 - 30400-K0WM-TA1",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "",
+"xdf": "m39.xdf",
+"items": 44,
+"bins": [
+{
+"file": "m39_0.bin",
+"name": "ADV160 - 30400-K0WM-TA1.bin"
+},
+{
+"file": "m39_1.bin",
+"name": "ADV160 - 30400-K0WM-TA1.bin mo.bin"
+}
+]
+},
+{
+"part": "KZR-701",
+"family": "CLICK",
+"title": "CLICK-125_KZR-701-702",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "",
+"xdf": "m40.xdf",
+"items": 15,
+"bins": [
+{
+"file": "m40_0.bin",
+"name": "CLICK-125_KZR-701.bin"
+},
+{
+"file": "m40_1.bin",
+"name": "Click125KZR 702.bin"
+}
+]
+},
+{
+"part": "K2VH-T11",
+"family": "CLICK",
+"title": "Click125 2023 K2VH-T11",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m41.xdf",
+"items": 41,
+"bins": [
+{
+"file": "m41_0.bin",
+"name": "K2VH_T11-ORIGINAL-Click125i.bin"
+}
+]
+},
+{
+"part": "K60S-T73",
+"family": "CLICK",
+"title": "Click125 30400-K60S-T73",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "",
+"xdf": "m42.xdf",
+"items": 35,
+"bins": [
+{
+"file": "m42_0.bin",
+"name": "30400-K60S-T73.bin"
+}
+]
+},
+{
+"part": "K03-H01",
+"family": "WAVE110I",
+"title": "K03-H01 25x29 64K WAVE110I 2014",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m43.xdf",
+"items": 40,
+"bins": [
+{
+"file": "m43_0.bin",
+"name": "K03-H01 8000-0.bin"
+}
+]
+},
+{
+"part": "K03-T61",
+"family": "WAVE110I",
+"title": "K03-T61 25X29 48K WAVE110I 2014",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m44.xdf",
+"items": 38,
+"bins": [
+{
+"file": "m44_0.bin",
+"name": "K03-T61 4000-9FEF.bin"
+}
+]
+},
+{
+"part": "K03-T61",
+"family": "WAVE110I",
+"title": "K03-T61 Wave 110i 2014",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m45.xdf",
+"items": 22,
+"bins": [
+{
+"file": "m45_0.bin",
+"name": "38770-K03-T61 WAVE110i 2014 .bin"
+}
+]
+},
+{
+"part": "K1ZP-T71",
+"family": "PCX",
+"title": "K1ZP-T71 PCX 2023 160abs",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "",
+"xdf": "m46.xdf",
+"items": 59,
+"bins": [
+{
+"file": "m46_0.bin",
+"name": "K1ZP-T71.bin"
+}
+]
+},
+{
+"part": "K1ZT-TF2",
+"family": "PCX",
+"title": "K1ZT-TF2-TH02",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "",
+"xdf": "m47.xdf",
+"items": 59,
+"bins": [
+{
+"file": "m47_0.bin",
+"name": "K1ZT-TF2-TH02.bin"
+}
+]
+},
+{
+"part": "K26-901",
+"family": "MSX",
+"title": "K26-901 25x29 48K MSX 2013",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m48.xdf",
+"items": 36,
+"bins": [
+{
+"file": "m48_0.bin",
+"name": "K26 901 4000-9FEF.bin"
+}
+]
+},
+{
+"part": "K26-911",
+"family": "MSX",
+"title": "K26-911 25x29 48K MSX",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m49.xdf",
+"items": 35,
+"bins": [
+{
+"file": "m49_0.bin",
+"name": "K26-911 4000-9FEF.bin"
+}
+]
+},
+{
+"part": "K26-B02",
+"family": "MSX",
+"title": "K26-B02 25x29 64K MSX 2016",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m50.xdf",
+"items": 38,
+"bins": [
+{
+"file": "m50_0.bin",
+"name": "K26-B02 8000-0.bin"
+}
+]
+},
+{
+"part": "K26-B13",
+"family": "MSX",
+"title": "K26-B13 25x29 64k MSX 2017-2019",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m51.xdf",
+"items": 39,
+"bins": [
+{
+"file": "m51_0.bin",
+"name": "38770-K26-B13 8000-0.bin"
+}
+]
+},
+{
+"part": "K2F-TD1",
+"family": "SCOOPY-I",
+"title": "K2F-TD1-scoopy-i-new",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m52.xdf",
+"items": 12,
+"bins": [
+{
+"file": "m52_0.bin",
+"name": "K2F-TD1.bin"
+}
+]
+},
+{
+"part": "K2J-T01",
+"family": "WAVE110I",
+"title": "K2J-T01 29x29 64K WAVE110I LED 2021",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m53.xdf",
+"items": 42,
+"bins": [
+{
+"file": "m53_0.bin",
+"name": "K2J-T01 8000-0.bin"
+}
+]
+},
+{
+"part": "K3F-T01",
+"family": "WAVE125I",
+"title": "K3F-T01 wave125 2022-2023",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m54.xdf",
+"items": 38,
+"bins": [
+{
+"file": "m54_0.bin",
+"name": "38770-K3F-T01-TH-WAVE125LED-2023 .bin"
+}
+]
+},
+{
+"part": "K3F-T61",
+"family": "WAVE125I",
+"title": "K3F-T61 0106280D01 wave125",
+"brand": "Keihin",
+"size": "96K",
+"ecm": "0106280D01",
+"xdf": "m55.xdf",
+"items": 14,
+"bins": [
+{
+"file": "m55_0.bin",
+"name": "K3F-T61 0106280D01.bin"
+}
+]
+},
+{
+"part": "K58-T81",
+"family": "WAVE110I",
+"title": "K58-T81 25X29 64K WAVE110I 2017",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m56.xdf",
+"items": 39,
+"bins": [
+{
+"file": "m56_0.bin",
+"name": "K58-T81 8000-0.bin"
+}
+]
+},
+{
+"part": "K58-TC0",
+"family": "WAVE110I",
+"title": "K58-TC0 25X29 64K WAVE110I LED 2019",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m57.xdf",
+"items": 40,
+"bins": [
+{
+"file": "m57_0.bin",
+"name": "K58-TC0 8000-0.bin"
+}
+]
+},
+{
+"part": "K58-TC2",
+"family": "WAVE110I",
+"title": "K58-TC2 29X29 64K WAVE110I LED 2020",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m58.xdf",
+"items": 40,
+"bins": [
+{
+"file": "m58_0.bin",
+"name": "K58-TC2 8000-0 RPM 12000 หอบยิง.bin"
+},
+{
+"file": "m58_1.bin",
+"name": "K58-TC2 8000-0.bin"
+}
+]
+},
+{
+"part": "K58M-TC1",
+"family": "WAVE110I",
+"title": "K58M-TC1 29X29 64K WAVE110I",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m59.xdf",
+"items": 41,
+"bins": [
+{
+"file": "m59_0.bin",
+"name": "38770-K58M-TC1 8000-0.bin"
+}
+]
+},
+{
+"part": "K73-M62",
+"family": "WAVE125I",
+"title": "K73-M62 25X29 64K WAVE125I LED 2019",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m60.xdf",
+"items": 39,
+"bins": [
+{
+"file": "m60_0.bin",
+"name": "38770-K73-M62 8000-0.bin"
+}
+]
+},
+{
+"part": "K73-T32",
+"family": "WAVE125I",
+"title": "K73-T32 25X29 64K WAVE125I 2017",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m61.xdf",
+"items": 40,
+"bins": [
+{
+"file": "m61_0.bin",
+"name": "K73-T32 8000-0.bin"
+}
+]
+},
+{
+"part": "K73-T61",
+"family": "WAVE125I",
+"title": "K73-T61 29x29 64K WAVE125I LED 2020",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m62.xdf",
+"items": 40,
+"bins": [
+{
+"file": "m62_0.bin",
+"name": "K73-T61 8000-0.bin"
+}
+]
+},
+{
+"part": "K73-TC2",
+"family": "WAVE125I",
+"title": "K73-TC2 29X29 64K WAVE125I LED",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m63.xdf",
+"items": 40,
+"bins": [
+{
+"file": "m63_0.bin",
+"name": "K73-TC2 8000-0.bin"
+}
+]
+},
+{
+"part": "K76-T61",
+"family": "DREAM110I",
+"title": "K76-T61 25x29 64K DREAM110I LED 2019",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m64.xdf",
+"items": 40,
+"bins": [
+{
+"file": "m64_0.bin",
+"name": "38770-K76-T61 8000-0.bin"
+}
+]
+},
+{
+"part": "K76-T62",
+"family": "DREAM110I",
+"title": "K76-T62 25X29 64K DREAM110I LED 2019",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m65.xdf",
+"items": 40,
+"bins": [
+{
+"file": "m65_0.bin",
+"name": "K76-T62 8000-0.bin"
+}
+]
+},
+{
+"part": "KVB-S53",
+"family": "CLICK",
+"title": "KVB-S53 25X29 48K CLICK 110I",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m66.xdf",
+"items": 38,
+"bins": [
+{
+"file": "m66_0.bin",
+"name": "KVB-S53 4000-9FEF.bin"
+}
+]
+},
+{
+"part": "KWW-642",
+"family": "WAVE110I",
+"title": "KWW-642 25x29 48K WAVE110I 2014",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m67.xdf",
+"items": 38,
+"bins": [
+{
+"file": "m67_0.bin",
+"name": "38770-KWW-642 4000-9FEF.bin"
+}
+]
+},
+{
+"part": "KWW-642",
+"family": "WAVE110I",
+"title": "KWW-642-643 Wave 110i 2014",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m68.xdf",
+"items": 22,
+"bins": [
+{
+"file": "m68_0.bin",
+"name": "38770-KWW-642 WAVE110i 2014 .bin"
+},
+{
+"file": "m68_1.bin",
+"name": "38770-KWW-643 WAVE110i 2014 .bin"
+}
+]
+},
+{
+"part": "KWW-643",
+"family": "WAVE110I",
+"title": "KWW-643 25x29 48K WAVE110I 2014",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m69.xdf",
+"items": 37,
+"bins": [
+{
+"file": "m69_0.bin",
+"name": "KWW-643 4000-9FEF.bin"
+}
+]
+},
+{
+"part": "KYZ-T03",
+"family": "WAVE125I",
+"title": "KYZ-T03 25x29 48K WAVW125I 2012",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m70.xdf",
+"items": 37,
+"bins": [
+{
+"file": "m70_0.bin",
+"name": "KYZ-T03 4000-9FEF.bin"
+}
+]
+},
+{
+"part": "KYZ-T03",
+"family": "WAVE125I",
+"title": "KYZ-T03 Wave 125i 2012",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m71.xdf",
+"items": 22,
+"bins": [
+{
+"file": "m71_0.bin",
+"name": "38770-KYZ-T03 WAVE 125i 2012 .bin"
+}
+]
+},
+{
+"part": "KYZ-T41",
+"family": "WAVE125I",
+"title": "KYZ-T41 25x29 64K WAVE125I",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m72.xdf",
+"items": 40,
+"bins": [
+{
+"file": "m72_0.bin",
+"name": "KYZ-T41 8000-0.bin"
+}
+]
+},
+{
+"part": "KZV-A61",
+"family": "DREAM110I",
+"title": "KZV-A61 25x29 64K DREAM110I 2017",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m73.xdf",
+"items": 40,
+"bins": [
+{
+"file": "m73_0.bin",
+"name": "KZV-A61 8000-0.bin"
+}
+]
+},
+{
+"part": "KZV-T03",
+"family": "DREAM110I",
+"title": "KZV-T03 Dream 110i 2015",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m74.xdf",
+"items": 22,
+"bins": [
+{
+"file": "m74_0.bin",
+"name": "38770-KZV-T03 DREAM 110i 2015 .bin"
+}
+]
+},
+{
+"part": "KZV-T03",
+"family": "DREAM110I",
+"title": "KZV-t03 25x29 48K DRAEM110I 2017",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m75.xdf",
+"items": 37,
+"bins": [
+{
+"file": "m75_0.bin",
+"name": "38770-KZV-t03 4000-9FEF.bin"
+}
+]
+},
+{
+"part": "K1ZF-T01",
+"family": "PCX",
+"title": "PCX160-30400-K1ZF-T01",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "",
+"xdf": "m76.xdf",
+"items": 33,
+"bins": [
+{
+"file": "m76_0.bin",
+"name": "30400-K1ZF-T01.bin"
+}
+]
+},
+{
+"part": "K1ZF-T11",
+"family": "PCX",
+"title": "PCX160-30400-K1ZF-T11",
+"brand": "Shindengen",
+"size": "384K",
+"ecm": "",
+"xdf": "m77.xdf",
+"items": 33,
+"bins": [
+{
+"file": "m77_0.bin",
+"name": "30400-K1ZF-T11.bin"
+}
+]
+},
+{
+"part": "K93-T01",
+"family": "SCOOPY-I",
+"title": "SCOOPY 110 K93-T01 T21",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m78.xdf",
+"items": 13,
+"bins": [
+{
+"file": "m78_0.bin",
+"name": "30400-K93-T01-21.bin"
+}
+]
+},
+{
+"part": "K2F-T81",
+"family": "SCOOPY-I",
+"title": "SCOOPYNEW-BIN-30400-K2F-T81",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m79.xdf",
+"items": 37,
+"bins": [
+{
+"file": "m79_0.bin",
+"name": "30400-K2F-T81.bin"
+}
+]
+},
+{
+"part": "K2F-T91",
+"family": "SCOOPY-I",
+"title": "SCOOPYNEW-BIN-30400-K2F-T91",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m80.xdf",
+"items": 37,
+"bins": [
+{
+"file": "m80_0.bin",
+"name": "30400-K2F-T91.bin"
+}
+]
+},
+{
+"part": "K16-901",
+"family": "SCOOPY-I",
+"title": "Scoopy i K16 - 901",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m81.xdf",
+"items": 24,
+"bins": [
+{
+"file": "m81_0.bin",
+"name": "k16-901 ori.bin"
+}
+]
+},
+{
+"part": "K16-H01",
+"family": "SCOOPY-I",
+"title": "Scoopy i K16 - H01 48",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m82.xdf",
+"items": 24,
+"bins": [
+{
+"file": "m82_0.bin",
+"name": "K16-H01 scoppy 48kb.bin"
+}
+]
+},
+{
+"part": "K2F-T01",
+"family": "SCOOPY-I",
+"title": "Scoopy i - 30400-K2F-T01-256",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m83.xdf",
+"items": 16,
+"bins": [
+{
+"file": "m83_0.bin",
+"name": "30400-K2F-T01.bin"
+}
+]
+},
+{
+"part": "K2F-T21",
+"family": "SCOOPY-I",
+"title": "Scoopy i - 30400-K2F-T21-256",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m84.xdf",
+"items": 16,
+"bins": [
+{
+"file": "m84_0.bin",
+"name": "30400-K2F-T21.bin"
+},
+{
+"file": "m84_1.bin",
+"name": "K2F-T21.bin"
+}
+]
+},
+{
+"part": "K2F-T81",
+"family": "SCOOPY-I",
+"title": "Scoopy i - 30400-K2F-T81-256",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m85.xdf",
+"items": 16,
+"bins": [
+{
+"file": "m85_0.bin",
+"name": "30400-K2F-T81.bin"
+}
+]
+},
+{
+"part": "K2F-T91",
+"family": "SCOOPY-I",
+"title": "Scoopy i - 30400-K2F-T91-256",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m86.xdf",
+"items": 16,
+"bins": [
+{
+"file": "m86_0.bin",
+"name": "30400-K2F-T91.bin"
+}
+]
+},
+{
+"part": "K2F-TB1",
+"family": "SCOOPY-I",
+"title": "Scoopy i - 30400-K2F-TB1-256",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m87.xdf",
+"items": 16,
+"bins": [
+{
+"file": "m87_0.bin",
+"name": "30400-K2F-TB1.bin"
+}
+]
+},
+{
+"part": "K16-B61",
+"family": "SCOOPY-I",
+"title": "Scoopy i K16 - B61 64 KB",
+"brand": "Keihin",
+"size": "64K",
+"ecm": "",
+"xdf": "m88.xdf",
+"items": 25,
+"bins": [
+{
+"file": "m88_0.bin",
+"name": "38770-K16-B61.bin"
+}
+]
+},
+{
+"part": "KZL-C03",
+"family": "SPACY-I",
+"title": "Spacy i KZL - C03 48 KB",
+"brand": "Keihin",
+"size": "48K",
+"ecm": "",
+"xdf": "m89.xdf",
+"items": 24,
+"bins": [
+{
+"file": "m89_0.bin",
+"name": "Spacy-i - KZL - C03 48KB.bin"
+}
+]
+},
+{
+"part": "K20N-T61",
+"family": "ZOOMER-X",
+"title": "Zoomer X K20N T61",
+"brand": "Shindengen",
+"size": "256K",
+"ecm": "",
+"xdf": "m90.xdf",
+"items": 13,
+"bins": [
+{
+"file": "m90_0.bin",
+"name": "K20N-T61.bin"
+}
+]
+}
 ]
