@@ -357,6 +357,78 @@ class _FlashPageState extends State<FlashPage> {
     _say(err ?? 'เริ่มเขียนแล้ว อย่าดับไฟ/ถอดสาย', err: err != null);
   }
 
+  bool get busy => sending || c.flashBusy;
+
+  // ชนิดกล่องของไฟล์ (เดาจากขนาด: Shindengen 256/384 KB, Keihin 48/56/64/96 KB)
+  String _fileVendor(int size) => size >= 200 * 1024 ? 'Shindengen' : 'Keihin';
+
+  // ตรวจไฟล์กับกล่องที่ต่ออยู่
+  ({Color col, IconData icon, String title, String sub}) _matchInfo() {
+    final s = sel;
+    if (s == null) return (col: Colors.white38, icon: Icons.info_outline, title: 'ยังไม่ได้เลือกไฟล์', sub: '');
+    final fv = _fileVendor(s.size);
+    final ecu = c.t.ecu;
+    final vSel = vendor == 1 ? 'Keihin' : (vendor == 2 ? 'Shindengen' : null);
+    if (vSel != null && vSel != fv) {
+      return (col: kBad, icon: Icons.error_outline, title: 'ชนิดกล่องไม่ตรงกับไฟล์', sub: 'ไฟล์ ${_kb(s.size)} เป็นแบบ $fv แต่เลือก $vSel');
+    }
+    if (ecu == null) {
+      return (col: kAmber, icon: Icons.help_outline, title: 'ยังตรวจรุ่นไม่ได้', sub: 'ยังไม่เจอกล่อง ECU · ไฟล์ ${_kb(s.size)} · $fv');
+    }
+    final ev = ecu.shin ? 'Shindengen' : 'Keihin';
+    final toks = RegExp(r'K[0-9A-Z]{1,3}[-_ ]?[A-Z0-9]{3}').allMatches('${s.name} ${s.src}'.toUpperCase()).map((m) => _norm(m.group(0)!)).toSet();
+    final ep = _norm(ecu.part);
+    final partOk = toks.isNotEmpty && toks.any((x) => ep.contains(x));
+    if (ev != fv) {
+      return (col: kBad, icon: Icons.error_outline, title: 'ไฟล์ไม่ตรงกับกล่อง', sub: 'กล่อง ${ecu.part} เป็น $ev แต่ไฟล์เป็น $fv');
+    }
+    if (partOk) {
+      return (col: kGreen, icon: Icons.check_circle, title: 'ตรงรุ่น พร้อมเขียน', sub: 'กล่อง ${ecu.part} · $ev\nไฟล์ ${_kb(s.size)} · ตรงยี่ห้อและพาร์ท');
+    }
+    return (col: kAmber, icon: Icons.warning_amber_rounded, title: 'ยี่ห้อตรง แต่พาร์ทไม่ตรง/ไม่ทราบ', sub: 'กล่อง ${ecu.part} · ไฟล์ ${s.name}');
+  }
+
+  // กดปุ่มเดียว: ส่งไฟล์ไปเกจ (ถ้ายังไม่มี) แล้วสั่งเขียนต่อทันที
+  Future<void> _flashNow() async {
+    final s = sel;
+    if (s == null || busy) return;
+    if (c.link != LinkState.connected) { _say('ยังไม่ได้เชื่อมต่อเกจ', err: true); return; }
+    if (!c.flashSupported) { _say('เฟิร์มแวร์เกจยังไม่รองรับ (ต้อง FW 1.3.0 ขึ้นไป)', err: true); return; }
+    final m = _matchInfo();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        backgroundColor: const Color(0xFF12161C),
+        title: const Row(children: [Icon(Icons.warning_amber_rounded, color: kBad), SizedBox(width: 8), Text('ยืนยัน FLASH ECU?', style: TextStyle(color: Colors.white))]),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('ไฟล์: ${s.name} (${_kb(s.size)})\nกล่อง: ${c.t.ecu?.part ?? c.t.ecmId ?? 'ไม่ทราบ'}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+          const SizedBox(height: 8),
+          Text('${m.title}${m.sub.isEmpty ? '' : '\n${m.sub}'}', style: TextStyle(color: m.col, fontSize: 12.5, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const Text('• ยังไม่ทดสอบกับกล่องจริง เขียนผิดพลาดกล่องพังถาวรได้\n• ห้ามดับไฟ/ถอดสาย/ปิดแอพระหว่างเขียน\n• แบตเตอรี่ต้องเต็ม', style: TextStyle(color: Colors.white70, fontSize: 12.5)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(d, true), child: const Text('FLASH เลย', style: TextStyle(color: kBad, fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    // 1) ส่งไฟล์ (ข้ามถ้าไฟล์เดียวกันอยู่ในเกจแล้ว)
+    if (!(sentName == s.name && c.t.fileRx == 2)) {
+      final bytes = await s.load();
+      setState(() { sending = true; sendProg = 0; msg = null; });
+      final err = await c.sendBinFile(bytes, s.name, (p) { if (mounted) setState(() => sendProg = p); });
+      if (!mounted) return;
+      setState(() { sending = false; sendProg = null; if (err == null) sentName = s.name; });
+      if (err != null) { _say(err, err: true); return; }
+    }
+    // 2) สั่งเขียนทันที
+    final err = await c.startFlash(vendor);
+    if (!mounted) return;
+    _say(err ?? 'เริ่มเขียนกล่องแล้ว — ดูความคืบหน้าที่นี่หรือที่หน้าจอเกจ', err: err != null);
+  }
+
   Future<void> _clearGauge() async {
     final err = await c.deleteGaugeBin();
     if (!mounted) return;
@@ -521,9 +593,8 @@ class _FlashPageState extends State<FlashPage> {
         final conn = c.link == LinkState.connected;
         final active = t.flashState >= 1 && t.flashState <= 5;
         final done = t.flashState == 6, fail = t.flashState == 7;
-        final inGauge = sentName != null || t.fileRx == 2;
-        final canSend = sel != null && conn && c.flashSupported && !sending && !active;
-        final canFlash = conn && c.flashSupported && !active && inGauge;
+        final busy = sending || active;
+        final canGo = sel != null && conn && c.flashSupported && !busy;
         final vDet = t.flashVendor == 1 ? 'Keihin' : (t.flashVendor == 2 ? 'Shindengen' : null);
         return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // สถานะกล่อง
@@ -534,71 +605,107 @@ class _FlashPageState extends State<FlashPage> {
             _kv('ชนิดกล่อง', vDet ?? (t.ecu != null ? (t.ecu!.shin ? 'Shindengen' : 'Keihin') : '—'), col: Colors.white),
             _kv('เกจ FW', t.fwText ?? '—', col: t.flashSup ? kGreen : (conn ? kAmber : Colors.white38)),
           ])),
-          // ขั้นตอน 1-2-3
-          _card(th, title: 'ขั้นตอนเขียนกล่อง', icon: Icons.bolt, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            _step(th, 1, 'เลือกไฟล์', sel != null,
-                sel == null
-                    ? const Text('แตะไฟล์จากคลังจูน หรือไฟล์ของฉัน ทางขวา', style: TextStyle(color: Colors.white54, fontSize: 11.5))
+          // FLASH ECU: เลือกไฟล์ -> กดปุ่มเดียว (แอพส่งไฟล์ไปเกจ แล้วสั่งเขียนต่อทันที)
+          _card(th, title: 'FLASH CONTROL', icon: Icons.bolt, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            // ไฟล์ที่เลือก
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              decoration: BoxDecoration(color: Colors.black45, border: Border.all(color: sel != null ? th.c : Colors.white24, width: 1.2), borderRadius: BorderRadius.circular(8)),
+              child: Row(children: [
+                Icon(Icons.folder_open, size: 18, color: sel != null ? th.c : Colors.white38),
+                const SizedBox(width: 8),
+                Expanded(child: sel == null
+                    ? const Text('แตะเลือกไฟล์จากรายการทางขวา', style: TextStyle(color: Colors.white54, fontSize: 12))
                     : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(sel!.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold)),
-                        Text('${sel!.src} · ${_kb(sel!.size)}', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                        Text(sel!.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        Text('${sel!.src} · ${_kb(sel!.size)}', style: const TextStyle(color: Colors.white54, fontSize: 10.5)),
                       ])),
-            _step(th, 2, 'ส่งไฟล์ไปเกจ', inGauge, Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              if (sending) ...[
-                ClipRRect(borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(value: sendProg, minHeight: 8, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation(th.c))),
-                const SizedBox(height: 4),
-                Text('กำลังส่ง ${((sendProg ?? 0) * 100).toInt()}%', style: const TextStyle(color: Colors.white70, fontSize: 11)),
-              ] else ...[
-                if (inGauge) Text('ในเกจ: ${sentName ?? 'มีไฟล์พร้อมเขียน'}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: kGreen, fontSize: 11.5)),
-                const SizedBox(height: 6),
-                Row(children: [
-                  Expanded(child: _hbtn('ส่งไปเกจ', Icons.upload, th.c, canSend ? _send : null, filled: true)),
-                  if (inGauge) ...[const SizedBox(width: 6), _hbtn('ลบในเกจ', Icons.delete_outline, kBad, active ? null : _clearGauge)],
-                ]),
-                if (!conn) const Padding(padding: EdgeInsets.only(top: 4), child: Text('ต้องเชื่อมต่อเกจก่อน', style: TextStyle(color: kAmber, fontSize: 11))),
-                if (conn && !c.flashSupported) const Padding(padding: EdgeInsets.only(top: 4), child: Text('เฟิร์มแวร์เกจต้อง 1.3.0 ขึ้นไป', style: TextStyle(color: kAmber, fontSize: 11))),
-              ],
-            ])),
-            _step(th, 3, 'เขียนลงกล่อง', done, Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Wrap(spacing: 6, runSpacing: 6, children: [
-                for (final v in const [[0, 'อัตโนมัติ'], [1, 'Keihin'], [2, 'Shindengen']])
-                  InkWell(
-                    onTap: active ? null : () => setState(() => vendor = v[0] as int),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: vendor == v[0] ? th.c.withOpacity(0.3) : Colors.black38,
-                        border: Border.all(color: vendor == v[0] ? th.c : Colors.white24),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(v[1] as String, style: TextStyle(color: vendor == v[0] ? Colors.white : Colors.white60, fontSize: 11.5, fontWeight: FontWeight.w600)),
-                    ),
-                  ),
               ]),
-              const SizedBox(height: 8),
-              if (active || done || fail) ...[
-                Row(children: [
-                  Icon(done ? Icons.check_circle : (fail ? Icons.error : Icons.sync), size: 16, color: done ? kGreen : (fail ? kBad : th.c)),
-                  const SizedBox(width: 6),
-                  Text(_stateText(t.flashState), style: TextStyle(color: done ? kGreen : (fail ? kBad : th.c), fontWeight: FontWeight.bold, fontSize: 13)),
-                  const Spacer(),
-                  if (active) Text('${t.flashPct}%', style: TextStyle(fontFamily: kFont, fontSize: 14, color: th.c)),
+            ),
+            const SizedBox(height: 8),
+            // ชนิดกล่อง
+            for (final v in const [[0, 'อัตโนมัติ', 'ดูจากขนาดไฟล์/กล่องที่ต่อ'], [1, 'Keihin', 'กล่อง Keihin (38770)'], [2, 'Shindengen', 'กล่อง Shindengen (30400) · คำนวณ KEY อัตโนมัติ']])
+              InkWell(
+                onTap: busy ? null : () => setState(() => vendor = v[0] as int),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 5),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: vendor == v[0] ? th.c.withOpacity(0.18) : Colors.transparent,
+                    border: Border.all(color: vendor == v[0] ? th.c : Colors.white12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(children: [
+                    Icon(vendor == v[0] ? Icons.radio_button_checked : Icons.radio_button_off, size: 18, color: vendor == v[0] ? th.c : Colors.white38),
+                    const SizedBox(width: 8),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(v[1] as String, style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                      Text(v[2] as String, style: const TextStyle(color: Colors.white54, fontSize: 10.5)),
+                    ])),
+                  ]),
+                ),
+              ),
+            const SizedBox(height: 4),
+            // ตรวจรุ่น
+            Builder(builder: (_) {
+              final m = _matchInfo();
+              return Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(color: m.col.withOpacity(0.15), border: Border.all(color: m.col), borderRadius: BorderRadius.circular(8)),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Icon(m.icon, size: 18, color: m.col),
+                  const SizedBox(width: 8),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(m.title, style: TextStyle(color: m.col, fontSize: 12.5, fontWeight: FontWeight.bold)),
+                    if (m.sub.isNotEmpty) Text(m.sub, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                  ])),
                 ]),
-                if (active) ...[
-                  const SizedBox(height: 6),
-                  ClipRRect(borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(value: t.flashPct / 100.0, minHeight: 10, backgroundColor: Colors.white12, valueColor: AlwaysStoppedAnimation(th.c))),
-                  const SizedBox(height: 4),
-                  const Text('ห้ามดับไฟ / ถอดสาย', style: TextStyle(color: kAmber, fontSize: 11, fontWeight: FontWeight.bold)),
-                ],
-                if (fail) const Text('ต่อสายไว้ ห้ามดับไฟ แล้วลองเขียนใหม่', style: TextStyle(color: kAmber, fontSize: 11)),
-                if (done) const Text('ดับกุญแจ รอ 5 วินาที แล้วสตาร์ทใหม่', style: TextStyle(color: Colors.white60, fontSize: 11)),
-                const SizedBox(height: 8),
-              ],
-              _hbtn(active ? 'กำลังเขียน...' : 'เขียนลงกล่อง', Icons.save_alt, kBad, canFlash ? _flash : null, filled: true, big: true),
-            ]), last: true),
+              );
+            }),
+            const SizedBox(height: 10),
+            // ปุ่มเดียว
+            InkWell(
+              onTap: canGo ? _flashNow : null,
+              borderRadius: BorderRadius.circular(10),
+              child: Opacity(
+                opacity: canGo ? 1 : 0.45,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: kBad.withOpacity(busy ? 0.25 : 0.55),
+                    border: Border.all(color: kBad, width: 1.6),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(busy ? 'กำลังเขียน...' : 'FLASH ECU', style: const TextStyle(fontFamily: kFont, fontSize: 17, color: Colors.white)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // ความคืบหน้า: ส่งไฟล์ (0-100) -> เขียนกล่อง (flashPct)
+            if (sending || active || done || fail) ...[
+              ClipRRect(borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: sending ? (sendProg ?? 0) : (active ? t.flashPct / 100.0 : (done ? 1.0 : 0.0)),
+                  minHeight: 10, backgroundColor: Colors.white12,
+                  valueColor: AlwaysStoppedAnimation(done ? kGreen : (fail ? kBad : th.c)))),
+              const SizedBox(height: 5),
+              Row(children: [
+                Icon(done ? Icons.check_circle : (fail ? Icons.error : Icons.sync), size: 15, color: done ? kGreen : (fail ? kBad : th.c)),
+                const SizedBox(width: 6),
+                Expanded(child: Text(
+                  sending ? 'ส่งไฟล์ไปเกจ ${((sendProg ?? 0) * 100).toInt()}%' : _stateText(t.flashState),
+                  style: TextStyle(color: done ? kGreen : (fail ? kBad : Colors.white), fontSize: 12.5, fontWeight: FontWeight.bold))),
+                if (active) Text('${t.flashPct}%', style: TextStyle(fontFamily: kFont, fontSize: 13, color: th.c)),
+              ]),
+              if (sending || active) const Padding(padding: EdgeInsets.only(top: 3), child: Text('ห้ามดับไฟ / ถอดสาย / ปิดแอพ', style: TextStyle(color: kAmber, fontSize: 11, fontWeight: FontWeight.bold))),
+              if (fail) const Text('ต่อสายไว้ ห้ามดับไฟ แล้วกด FLASH ECU ใหม่', style: TextStyle(color: kAmber, fontSize: 11)),
+              if (done) const Text('ดับกุญแจ รอ 5 วินาที แล้วสตาร์ทใหม่', style: TextStyle(color: Colors.white60, fontSize: 11)),
+            ] else if (!conn)
+              const Text('ต้องเชื่อมต่อเกจก่อน (ปุ่ม "เชื่อมต่อ" หน้าหลัก)', style: TextStyle(color: kAmber, fontSize: 11))
+            else if (!c.flashSupported)
+              const Text('เฟิร์มแวร์เกจต้อง 1.3.0 ขึ้นไป', style: TextStyle(color: kAmber, fontSize: 11)),
           ])),
           // คำเตือน
           FxPanel(
