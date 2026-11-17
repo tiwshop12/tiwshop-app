@@ -3950,11 +3950,100 @@ class _FlashPageState extends State<FlashPage> {
   Future<void> _load() async {
     final l = await widget.c.listBins();
     final x = await widget.c.listXdfs();
+    if (lib.isEmpty) {
+      try {
+        final j = jsonDecode(await rootBundle.loadString('assets/tunelib/index.json')) as List;
+        lib = j.cast<Map<String, dynamic>>();
+      } catch (_) {}
+    }
     if (!mounted) return;
     setState(() { files = l; xdfs = x; loading = false; });
   }
 
   List<io.File> xdfs = [];
+
+  // ----- คลังจูนสำเร็จรูป (BIN + XDF ติดมากับแอพ) -----
+  List<Map<String, dynamic>> lib = [];
+  bool libAll = false;
+  static String _norm(String s) => s.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  // รุ่นนี้ตรงกับกล่องที่ต่ออยู่ไหม (เทียบพาร์ท เช่น 38770-K03-H01 กับ K03-H01)
+  bool _libIsEcu(Map<String, dynamic> e) {
+    final p = widget.c.t.ecu?.part;
+    return p != null && _norm(p).contains(_norm(e['part'] as String));
+  }
+  List<Map<String, dynamic>> get _libSorted {
+    final l = [...lib];
+    l.sort((a, b) => (_libIsEcu(b) ? 1 : 0).compareTo(_libIsEcu(a) ? 1 : 0));
+    return l;
+  }
+  String _libTitle(Map<String, dynamic> e) => '${e['part']}  ${e['model']}';
+  String _libSub(Map<String, dynamic> e) => [e['grid'], e['size']].where((x) => (x as String).isNotEmpty).join(' · ');
+
+  Future<Uint8List> _asset(String f) async => (await rootBundle.load('assets/tunelib/$f')).buffer.asUint8List();
+
+  // เลือก BIN ของรุ่น (บางรุ่นมีหลายไฟล์)
+  Future<Map<String, dynamic>?> _pickLibBin(Map<String, dynamic> e) async {
+    final bins = (e['bins'] as List).cast<Map<String, dynamic>>();
+    if (bins.length == 1) return bins.first;
+    return showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      backgroundColor: const Color(0xFF12161C),
+      builder: (sctx) => SafeArea(child: ListView(shrinkWrap: true, children: [
+        Padding(padding: const EdgeInsets.all(12), child: Text('เลือกไฟล์ BIN · ${e['part']}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+        for (final b in bins)
+          ListTile(
+            leading: const Icon(Icons.memory, color: kAmber),
+            title: Text(b['name'] as String, style: const TextStyle(color: Colors.white, fontSize: 13)),
+            onTap: () => Navigator.pop(sctx, b),
+          ),
+      ])),
+    );
+  }
+
+  Future<void> _libTune(Map<String, dynamic> e) async {
+    try {
+      final b = await _pickLibBin(e);
+      if (b == null) return;
+      final bin = await _asset(b['file'] as String);
+      final xb = await _asset(e['xdf'] as String);
+      await _openTune(b['name'] as String, bin, xb);
+    } catch (err) {
+      setState(() => msg = 'เปิดไฟล์จากคลังจูนไม่สำเร็จ: $err');
+    }
+  }
+
+  Future<void> _libCopy(Map<String, dynamic> e) async {
+    try {
+      final b = await _pickLibBin(e);
+      if (b == null) return;
+      await widget.c.importBinBytes(b['name'] as String, await _asset(b['file'] as String));
+      await widget.c.importXdfBytes('${e['part']} ${e['model']}.xdf', await _asset(e['xdf'] as String));
+      setState(() => msg = 'เพิ่ม ${b['name']} + XDF เข้าคลังไฟล์แล้ว');
+      await _load();
+    } catch (err) {
+      setState(() => msg = 'เพิ่มเข้าคลังไม่สำเร็จ: $err');
+    }
+  }
+
+  Widget _libRow(AppTheme th, Map<String, dynamic> e) {
+    final isEcu = _libIsEcu(e);
+    final col = isEcu ? kGreen : th.c;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: Colors.black38, border: Border.all(color: col.withOpacity(isEcu ? 1 : 0.5), width: isEcu ? 1.5 : 1), borderRadius: BorderRadius.circular(8)),
+      child: Row(children: [
+        Icon(Icons.two_wheeler, color: col, size: 18),
+        const SizedBox(width: 8),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(_libTitle(e), style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+          Text(isEcu ? 'ตรงกับกล่องที่ต่ออยู่ · ${_libSub(e)}' : _libSub(e), style: TextStyle(color: isEcu ? kGreen : Colors.white38, fontSize: 11)),
+        ])),
+        IconButton(onPressed: () => _libTune(e), icon: const Icon(Icons.tune, color: kAmber, size: 20), tooltip: 'จูน'),
+        IconButton(onPressed: () => _libCopy(e), icon: Icon(Icons.download, color: th.c, size: 20), tooltip: 'เพิ่มเข้าคลังไฟล์'),
+      ]),
+    );
+  }
 
   Future<Uint8List?> _bytesOf(PlatformFile f) async {
     if (f.bytes != null) return f.bytes;
@@ -4014,6 +4103,7 @@ class _FlashPageState extends State<FlashPage> {
     try {
       final binName = f.path.split('/').last;
       final sorted = [...xdfs]..sort((a, b) => _match(binName, b.path.split('/').last).compareTo(_match(binName, a.path.split('/').last)));
+      final libX = [...lib]..sort((a, b) => _match(binName, b['part'] as String).compareTo(_match(binName, a['part'] as String)));
       // เลือก XDF: จากคลังในแอพ หรือจากเครื่อง
       final choice = await showModalBottomSheet<Object>(
         context: context,
@@ -4030,6 +4120,16 @@ class _FlashPageState extends State<FlashPage> {
                 subtitle: _match(binName, x.path.split('/').last) > 0 ? const Text('ชื่อตรงกับ BIN', style: TextStyle(color: kGreen, fontSize: 11)) : null,
                 onTap: () => Navigator.pop(sctx, x),
               ),
+            if (libX.isNotEmpty) const Padding(padding: EdgeInsets.fromLTRB(12, 10, 12, 4),
+              child: Text('XDF จากคลังจูนในแอพ', style: TextStyle(color: kAmber, fontSize: 12, fontWeight: FontWeight.bold))),
+            for (final e in libX)
+              ListTile(
+                leading: Icon(Icons.two_wheeler, color: _match(binName, e['part'] as String) > 0 ? kGreen : Colors.white54),
+                title: Text(_libTitle(e), style: const TextStyle(color: Colors.white, fontSize: 13)),
+                subtitle: Text(_match(binName, e['part'] as String) > 0 ? 'ชื่อตรงกับ BIN · ${_libSub(e)}' : _libSub(e),
+                    style: TextStyle(color: _match(binName, e['part'] as String) > 0 ? kGreen : Colors.white38, fontSize: 11)),
+                onTap: () => Navigator.pop(sctx, e),
+              ),
             ListTile(
               leading: const Icon(Icons.folder_open, color: kAmber),
               title: const Text('เลือกไฟล์ .xdf จากเครื่อง', style: TextStyle(color: kAmber)),
@@ -4042,6 +4142,8 @@ class _FlashPageState extends State<FlashPage> {
       Uint8List? xb;
       if (choice is io.File) {
         xb = await choice.readAsBytes();
+      } else if (choice is Map<String, dynamic>) {
+        xb = await _asset(choice['xdf'] as String);
       } else {
         final res = await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
         if (res == null || res.files.isEmpty) return;
@@ -4050,27 +4152,29 @@ class _FlashPageState extends State<FlashPage> {
       }
       if (xb == null) { setState(() => msg = 'ไม่พบไฟล์ / อ่าน XDF ไม่ได้'); return; }
       if (!_looksXdf(xb)) { setState(() => msg = 'ไฟล์นี้ไม่ใช่ XDF แบบ XML (อาจยังเข้ารหัสอยู่ หรือยังอยู่ใน .rar)'); return; }
-      // XDF เก็บเป็น ASCII/TIS-620 ไบต์ — map ไบต์ตรง ๆ เป็นโค้ดพอยต์ (พาร์สด้วย regex ภายหลัง)
-      final xml = String.fromCharCodes(xb);
-      final doc = XdfDoc.parse(xml);
-      if (doc.items.isEmpty) {
-        setState(() => msg = 'ไฟล์ XDF นี้ไม่มีพารามิเตอร์ หรือเป็น XDF แบบเข้ารหัส (เปิดได้เฉพาะไฟล์ XDF แบบ XML)');
-        return;
-      }
-      final bin = await f.readAsBytes();
-      if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => TunePage(
-        fileName: f.path.split('/').last,
-        bin: bin,
-        xdf: doc,
-        getRpm: () => (widget.c.demo || widget.c.ecuLive) ? widget.c.t.rpm : null,
-        getTps: () => (widget.c.demo || widget.c.ecuLive) ? widget.c.t.tps : null,
-        onSave: (name, bytes) async { await widget.c.importBinBytes(name, bytes); },
-      )));
-      await _load();
+      await _openTune(binName, await f.readAsBytes(), xb);
     } catch (e) {
       setState(() => msg = 'เปิดหน้าจูนไม่สำเร็จ: $e');
     }
+  }
+
+  Future<void> _openTune(String binName, Uint8List bin, Uint8List xb) async {
+    // XDF เก็บเป็น ASCII/TIS-620 ไบต์ — map ไบต์ตรง ๆ เป็นโค้ดพอยต์ (พาร์สด้วย regex ภายหลัง)
+    final doc = XdfDoc.parse(String.fromCharCodes(xb));
+    if (doc.items.isEmpty) {
+      setState(() => msg = 'ไฟล์ XDF นี้ไม่มีพารามิเตอร์ หรือเป็น XDF แบบเข้ารหัส (เปิดได้เฉพาะไฟล์ XDF แบบ XML)');
+      return;
+    }
+    if (!mounted) return;
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => TunePage(
+      fileName: binName,
+      bin: bin,
+      xdf: doc,
+      getRpm: () => (widget.c.demo || widget.c.ecuLive) ? widget.c.t.rpm : null,
+      getTps: () => (widget.c.demo || widget.c.ecuLive) ? widget.c.t.tps : null,
+      onSave: (name, bytes) async { await widget.c.importBinBytes(name, bytes); },
+    )));
+    await _load();
   }
 
   Future<void> _send(io.File f) async {
@@ -4219,6 +4323,27 @@ class _FlashPageState extends State<FlashPage> {
                       ),
                     ])),
                     const SizedBox(height: 12),
+                    // คลังจูนสำเร็จรูป (ติดมากับแอพ)
+                    if (lib.isNotEmpty) ...[
+                      AnimatedBuilder(
+                        animation: widget.c,
+                        builder: (_, __) {
+                          final l = _libSorted;
+                          final show = libAll ? l : l.take(4).toList();
+                          return _panel(th, 'คลังจูนในแอพ (${lib.length} รุ่น · BIN + XDF)', Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                            const Text('ไอคอนสีส้ม = จูนทันที · ไอคอนลูกศร = เพิ่ม BIN + XDF เข้าคลังไฟล์ (ไว้ส่งไปเกจ/เขียนกล่อง)', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                            const SizedBox(height: 8),
+                            for (final e in show) _libRow(th, e),
+                            if (l.length > 4)
+                              TextButton(
+                                onPressed: () => setState(() => libAll = !libAll),
+                                child: Text(libAll ? 'ย่อรายการ' : 'แสดงทั้งหมด ${l.length} รุ่น', style: TextStyle(color: th.c)),
+                              ),
+                          ]));
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     // คลังไฟล์
                     _panel(th, 'คลังไฟล์ (.bin)', Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Row(children: [

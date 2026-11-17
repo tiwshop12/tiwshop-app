@@ -1,0 +1,409 @@
+[
+ {
+  "part": "K03-H01",
+  "model": "WAVE110I 2014",
+  "grid": "25x29",
+  "size": "64K",
+  "xdf": "K03H01.xdf",
+  "bins": [
+   {
+    "file": "K03H01_0.bin",
+    "name": "K03-H01 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K03-T61",
+  "model": "WAVE110I 2014",
+  "grid": "25x29",
+  "size": "48K",
+  "xdf": "K03T61.xdf",
+  "bins": [
+   {
+    "file": "K03T61_0.bin",
+    "name": "K03-T61 4000-9FEF.bin"
+   }
+  ]
+ },
+ {
+  "part": "K26-901",
+  "model": "MSX 2013",
+  "grid": "25x29",
+  "size": "48K",
+  "xdf": "K26901.xdf",
+  "bins": [
+   {
+    "file": "K26901_0.bin",
+    "name": "K26 901 4000-9FEF.bin"
+   }
+  ]
+ },
+ {
+  "part": "K26-911",
+  "model": "MSX",
+  "grid": "25x29",
+  "size": "48K",
+  "xdf": "K26911.xdf",
+  "bins": [
+   {
+    "file": "K26911_0.bin",
+    "name": "K26-911 4000-9FEF.bin"
+   }
+  ]
+ },
+ {
+  "part": "K26-B02",
+  "model": "MSX 2016",
+  "grid": "25x29",
+  "size": "64K",
+  "xdf": "K26B02.xdf",
+  "bins": [
+   {
+    "file": "K26B02_0.bin",
+    "name": "K26-B02 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K26-B13",
+  "model": "MSX 2017-2019",
+  "grid": "25x29",
+  "size": "64K",
+  "xdf": "K26B13.xdf",
+  "bins": [
+   {
+    "file": "K26B13_0.bin",
+    "name": "38770-K26-B13 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K2J-T01",
+  "model": "WAVE110I LED 2021",
+  "grid": "29x29",
+  "size": "64K",
+  "xdf": "K2JT01.xdf",
+  "bins": [
+   {
+    "file": "K2JT01_0.bin",
+    "name": "K2J-T01 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K3F-T01",
+  "model": "WAVE125I 2022-2023",
+  "grid": "29x29",
+  "size": "64K",
+  "xdf": "K3FT01.xdf",
+  "bins": [
+   {
+    "file": "K3FT01_0.bin",
+    "name": "38770-K3F-T01 125wave2022-23 ล่าสุด.bin"
+   }
+  ]
+ },
+ {
+  "part": "K58-T81",
+  "model": "WAVE110I 2017",
+  "grid": "25x29",
+  "size": "64K",
+  "xdf": "K58T81.xdf",
+  "bins": [
+   {
+    "file": "K58T81_0.bin",
+    "name": "K58-T81 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K58-TC0",
+  "model": "WAVE110I LED 2019",
+  "grid": "25x29",
+  "size": "64K",
+  "xdf": "K58TC0.xdf",
+  "bins": [
+   {
+    "file": "K58TC0_0.bin",
+    "name": "K58-TC0 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K58-TC2",
+  "model": "WAVE110I LED 2020",
+  "grid": "29x29",
+  "size": "64K",
+  "xdf": "K58TC2.xdf",
+  "bins": [
+   {
+    "file": "K58TC2_0.bin",
+    "name": "K58-TC2 8000-0 RPM 12000 หอบยิง.bin"
+   },
+   {
+    "file": "K58TC2_1.bin",
+    "name": "K58-TC2 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K58M-TC1",
+  "model": "WAVE110I",
+  "grid": "29x29",
+  "size": "64K",
+  "xdf": "K58MTC1.xdf",
+  "bins": [
+   {
+    "file": "K58MTC1_0.bin",
+    "name": "38770-K58M-TC1 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K73-M62",
+  "model": "WAVE125I LED 2019",
+  "grid": "25x29",
+  "size": "64K",
+  "xdf": "K73M62.xdf",
+  "bins": [
+   {
+    "file": "K73M62_0.bin",
+    "name": "38770-K73-M62 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K73-T32",
+  "model": "WAVE125I 2017",
+  "grid": "25x29",
+  "size": "64K",
+  "xdf": "K73T32.xdf",
+  "bins": [
+   {
+    "file": "K73T32_0.bin",
+    "name": "K73-T32 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K73-T61",
+  "model": "WAVE125I LED 2020",
+  "grid": "29x29",
+  "size": "64K",
+  "xdf": "K73T61.xdf",
+  "bins": [
+   {
+    "file": "K73T61_0.bin",
+    "name": "K73-T61 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K73-TC2",
+  "model": "WAVE125I LED",
+  "grid": "29x29",
+  "size": "64K",
+  "xdf": "K73TC2.xdf",
+  "bins": [
+   {
+    "file": "K73TC2_0.bin",
+    "name": "K73-TC2 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K76-T61",
+  "model": "DREAM110I LED 2019",
+  "grid": "25x29",
+  "size": "64K",
+  "xdf": "K76T61.xdf",
+  "bins": [
+   {
+    "file": "K76T61_0.bin",
+    "name": "38770-K76-T61 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K76-T62",
+  "model": "DREAM110I LED 2019",
+  "grid": "25x29",
+  "size": "64K",
+  "xdf": "K76T62.xdf",
+  "bins": [
+   {
+    "file": "K76T62_0.bin",
+    "name": "K76-T62 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K90-V03",
+  "model": "รถนอก",
+  "grid": "25x29",
+  "size": "64K",
+  "xdf": "K90V03.xdf",
+  "bins": [
+   {
+    "file": "K90V03_0.bin",
+    "name": "K90-V03_8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "K94-T02",
+  "model": "CBR 150R",
+  "grid": "29x29",
+  "size": "96K",
+  "xdf": "K94T02.xdf",
+  "bins": [
+   {
+    "file": "K94T02_0.bin",
+    "name": "K94-T02-CB150_8000-1FFFF.bin"
+   }
+  ]
+ },
+ {
+  "part": "KPP-T03",
+  "model": "CBR 150R",
+  "grid": "22x29",
+  "size": "56K",
+  "xdf": "KPPT03.xdf",
+  "bins": [
+   {
+    "file": "KPPT03_0.bin",
+    "name": "38770-KPP-T03-CBR_150 0-DFEF.bin"
+   }
+  ]
+ },
+ {
+  "part": "KVB-S53",
+  "model": "CLICK 110I",
+  "grid": "25x29",
+  "size": "48K",
+  "xdf": "KVBS53.xdf",
+  "bins": [
+   {
+    "file": "KVBS53_0.bin",
+    "name": "KVB-S53 4000-9FEF.bin"
+   }
+  ]
+ },
+ {
+  "part": "KWW-601",
+  "model": "WAVE110I เรือนตั้งตัวแรก",
+  "grid": "18x26",
+  "size": "56K",
+  "xdf": "KWW601.xdf",
+  "bins": [
+   {
+    "file": "KWW601_0.bin",
+    "name": "KWW-601 0-7FEF.bin"
+   }
+  ]
+ },
+ {
+  "part": "KWW-642",
+  "model": "WAVE110I 2014",
+  "grid": "25x29",
+  "size": "48K",
+  "xdf": "KWW642.xdf",
+  "bins": [
+   {
+    "file": "KWW642_0.bin",
+    "name": "38770-KWW-642 4000-9FEF.bin"
+   }
+  ]
+ },
+ {
+  "part": "KWW-643",
+  "model": "WAVE110I 2014",
+  "grid": "25x29",
+  "size": "48K",
+  "xdf": "KWW643.xdf",
+  "bins": [
+   {
+    "file": "KWW643_0.bin",
+    "name": "KWW-643 4000-9FEF.bin"
+   }
+  ]
+ },
+ {
+  "part": "KYL-T01",
+  "model": "ไฟเลี้ยวบังลม",
+  "grid": "18x26",
+  "size": "56K",
+  "xdf": "KYLT01.xdf",
+  "bins": [
+   {
+    "file": "KYLT01_0.bin",
+    "name": "38770-KYL-T01 0-7FEF.bin"
+   }
+  ]
+ },
+ {
+  "part": "KYT-901",
+  "model": "สกุปปี่",
+  "grid": "22x29",
+  "size": "56K",
+  "xdf": "KYT901.xdf",
+  "bins": [
+   {
+    "file": "KYT901_0.bin",
+    "name": "scoopy KYT-901 0-7FEF.bin"
+   }
+  ]
+ },
+ {
+  "part": "KYZ-T03",
+  "model": "WAVE125I 2012",
+  "grid": "25x29",
+  "size": "48K",
+  "xdf": "KYZT03.xdf",
+  "bins": [
+   {
+    "file": "KYZT03_0.bin",
+    "name": "KYZ-T03 4000-9FEF.bin"
+   }
+  ]
+ },
+ {
+  "part": "KYZ-T41",
+  "model": "WAVE125I",
+  "grid": "25x29",
+  "size": "64K",
+  "xdf": "KYZT41.xdf",
+  "bins": [
+   {
+    "file": "KYZT41_0.bin",
+    "name": "KYZ-T41 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "KZV-A61",
+  "model": "DREAM110I 2017",
+  "grid": "25x29",
+  "size": "64K",
+  "xdf": "KZVA61.xdf",
+  "bins": [
+   {
+    "file": "KZVA61_0.bin",
+    "name": "KZV-A61 8000-0.bin"
+   }
+  ]
+ },
+ {
+  "part": "KZV-T03",
+  "model": "DREAM110I 2017",
+  "grid": "25x29",
+  "size": "48K",
+  "xdf": "KZVT03.xdf",
+  "bins": [
+   {
+    "file": "KZVT03_0.bin",
+    "name": "38770-KZV-t03 4000-9FEF.bin"
+   }
+  ]
+ }
+]
