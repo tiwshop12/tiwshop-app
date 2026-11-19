@@ -683,8 +683,8 @@ class _TunePageState extends State<TunePage> {
       : (e.is2d ? Icons.grid_on : (e.isConst ? Icons.looks_one_outlined : Icons.view_week_outlined));
   Color _icol(XdfTable e) => e.isFlag ? _kYel : e.isPatch ? _kOrg : e.isInfo ? Colors.white38 : (e.is2d ? _kCyan : _kGrn);
 
-  // รายการพารามิเตอร์ทั้งหมด (Parameter Tree ของ TunerPro) + ค้นหา + กรองชนิด/หมวด
-  int _fk = 0; int? _fcat; String _q = '';
+  // รายการพารามิเตอร์ทั้งหมด (Parameter Tree ของ TunerPro) + กรองชนิด/หมวด
+  int _fk = 0; int? _fcat;
   Future<void> _pickParam() async {
     const fl = ['ทั้งหมด', 'ตาราง', 'ค่าเดียว', 'FLAG', 'แพตช์'];
     bool ok(XdfTable e) {
@@ -696,11 +696,9 @@ class _TunePageState extends State<TunePage> {
         case 5: if (!e.isInfo) return false; break;
       }
       if (_fcat != null && !e.cats.contains(_fcat)) return false;
-      if (_q.isNotEmpty && !e.title.toLowerCase().contains(_q.toLowerCase())) return false;
       return true;
     }
     int n(int k) { final o = _fk; _fk = k; final r = items.where(ok).length; _fk = o; return r; }
-    final qc = TextEditingController(text: _q);
     final usedCats = <int>{for (final e in items) ...e.cats}.where((c) => widget.xdf.cats.containsKey(c)).toList()..sort();
     final i = await showModalBottomSheet<int>(
       context: context,
@@ -720,19 +718,6 @@ class _TunePageState extends State<TunePage> {
                   Expanded(child: Text(widget.xdf.title.isEmpty ? 'พารามิเตอร์ทั้งหมด' : widget.xdf.title, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: s(14)))),
                   Text('${items.length} รายการ', style: TextStyle(color: Colors.white38, fontSize: s(11))),
                 ]),
-              ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: s(10), vertical: s(4)),
-                child: TextField(
-                  onChanged: (v) => setS(() => _q = v),
-                  controller: qc,
-                  style: TextStyle(color: Colors.white, fontSize: s(13)),
-                  decoration: InputDecoration(
-                    isDense: true, prefixIcon: Icon(Icons.search, color: Colors.white38, size: s(18)), hintText: 'ค้นหาชื่อ (เช่น ล็อค, มัด, ฉีด, ไฟ)',
-                    hintStyle: TextStyle(color: Colors.white24, fontSize: s(12)), filled: true, fillColor: const Color(0xFF151A21),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                  ),
-                ),
               ),
               SizedBox(
                 height: s(34),
