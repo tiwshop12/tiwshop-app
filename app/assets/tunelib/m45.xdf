@@ -16,6 +16,16 @@
     <CATEGORY index="0x6" name="Diaqnostic Trouble Code" />
     <CATEGORY index="0x7" name="Temp Scaling" />
   </XDFHEADER>
+  <XDFCONSTANT uniqueid="0x7E1D">
+    <title>&#168;&#209;&#180;&#183;&#211;&#226;&#180;&#194; &#170;&#232;&#210;&#167;&#183;&#212;&#199;&#224;&#193;&#215;&#205;&#167;&#224;&#197;&#194; 0810124526</title>
+    <EMBEDDEDDATA mmedelementsizebits="8" mmedmajorstridebits="0" mmedminorstridebits="0" />
+    <datatype>0</datatype>
+    <unittype>0</unittype>
+    <DALINK index="0" />
+    <MATH equation="X">
+      <VAR id="X" />
+    </MATH>
+  </XDFCONSTANT>
   <XDFTABLE uniqueid="0x36AB" flags="0x30">
     <title>RPM &#181;&#210;&#195;&#210;&#167;&#195;&#205;&#186;&#224;&#164;&#195;&#215;&#232;&#205;&#167;</title>
     <CATEGORYMEM index="0" category="1" />

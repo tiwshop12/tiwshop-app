@@ -175,9 +175,9 @@ int? _hex(String? s) {
 class XdfDoc {
   final List<XdfTable> items; // ตามลำดับในไฟล์ (เหมือน Parameter Ordered List ของ TunerPro)
   final Map<String, XdfTable> byId;
-  final String title, desc;
+  final String title, desc, credit;
   final Map<int, String> cats;  // CATEGORY index -> ชื่อหมวด
-  XdfDoc(this.items, {this.title = '', this.desc = '', this.cats = const {}}) : byId = {for (final t in items) t.id.toLowerCase(): t};
+  XdfDoc(this.items, {this.title = '', this.desc = '', this.cats = const {}, this.credit = ''}) : byId = {for (final t in items) t.id.toLowerCase(): t};
   List<XdfTable> get tables => items.where((t) => t.isTable).toList();
 
   static XdfDoc parse(String xml) {
@@ -230,11 +230,14 @@ class XdfDoc {
     }
 
     final out = <XdfTable>[];
+    String credit = '';
     for (final m in RegExp(r'<(XDFTABLE|XDFFLAG|XDFPATCH|XDFCONSTANT|XDFFUNCTION|XDFCHECKSUM)\b[\s\S]*?</\1>').allMatches(xml)) {
       final t = m.group(0)!;
       final kind = m.group(1)!;
       final id = _attr(t.substring(0, t.indexOf('>') + 1), 'uniqueid') ?? 'n${out.length}';
-      if (_bad.hasMatch(title(t))) continue;   // ชื่อร้านอื่น / เบอร์โทร ไม่แสดง
+      final ti0 = title(t);
+      if (ti0.contains('0810124526')) { if (credit.isEmpty) credit = ti0; continue; }   // เครดิตผู้จัดทำ (แสดงที่หัวรายการ)
+      if (_bad.hasMatch(ti0)) continue;   // ชื่อร้านอื่น / เบอร์โทร ไม่แสดง
       // รายการที่ไม่มีค่าให้แก้ (หัวข้อไม่มีที่อยู่ / แพตช์ว่าง / ฟังก์ชัน / checksum) ไม่ใส่ในรายการ
       if (kind == 'XDFPATCH') {
         final es = <PatchEntry>[];
@@ -316,7 +319,7 @@ class XdfDoc {
     }
     String hg(String k) => decodeTis620(_entities(RegExp('<$k>([\\s\\S]*?)</$k>').firstMatch(head)?.group(1)?.trim() ?? '')).trim();
     String clean(String v) => _bad.hasMatch(v) ? '' : v;
-    return XdfDoc(out, title: clean(hg('deftitle')), desc: clean(hg('description')), cats: cm);
+    return XdfDoc(out, title: clean(hg('deftitle')), desc: clean(hg('description')), cats: cm, credit: credit);
   }
 }
 
@@ -724,6 +727,15 @@ class _TunePageState extends State<TunePage> {
                   Text('${items.length} รายการ', style: TextStyle(color: Colors.white38, fontSize: s(11))),
                 ]),
               ),
+              if (widget.xdf.credit.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(s(14), 0, s(14), s(6)),
+                  child: Row(children: [
+                    Icon(Icons.verified_outlined, color: _kLime, size: s(14)),
+                    SizedBox(width: s(6)),
+                    Expanded(child: Text(widget.xdf.credit, style: TextStyle(color: _kLime, fontSize: s(12), fontWeight: FontWeight.bold))),
+                  ]),
+                ),
               SizedBox(
                 height: s(34),
                 child: ListView(scrollDirection: Axis.horizontal, padding: EdgeInsets.symmetric(horizontal: s(8)), children: [

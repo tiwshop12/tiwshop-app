@@ -21,6 +21,16 @@
     <CATEGORY index="0xC" name="30400-K1ZT-TC1" />
     <CATEGORY index="0x2C" name="168Buffet" />
   </XDFHEADER>
+  <XDFCONSTANT uniqueid="0x7E1D">
+    <title>&#168;&#209;&#180;&#183;&#211;&#226;&#180;&#194; &#170;&#232;&#210;&#167;&#183;&#212;&#199;&#224;&#193;&#215;&#205;&#167;&#224;&#197;&#194; 0810124526</title>
+    <EMBEDDEDDATA mmedelementsizebits="8" mmedmajorstridebits="0" mmedminorstridebits="0" />
+    <datatype>0</datatype>
+    <unittype>0</unittype>
+    <DALINK index="0" />
+    <MATH equation="X">
+      <VAR id="X" />
+    </MATH>
+  </XDFCONSTANT>
   <XDFTABLE uniqueid="0x75C" flags="0x30">
     <title>TPS AXIS &#225;&#161;&#185;&#164;&#209;&#185;&#224;&#195;&#232;&#167;</title>
     <CATEGORYMEM index="0" category="13" />
