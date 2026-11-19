@@ -1414,9 +1414,6 @@
     <EMBEDDEDDATA mmedtypeflags="0x02" mmedaddress="0x2631" mmedelementsizebits="8" mmedmajorstridebits="0" mmedminorstridebits="0" />
     <mask>0x08</mask>
   </XDFFLAG>
-  <XDFPATCH uniqueid="0x1571">
-    <title>zar racing</title>
-  </XDFPATCH>
   <XDFFLAG uniqueid="0x72B2">
     <title>VCT</title>
     <EMBEDDEDDATA mmedtypeflags="0x02" mmedaddress="0x6236" mmedelementsizebits="8" mmedmajorstridebits="0" mmedminorstridebits="0" />

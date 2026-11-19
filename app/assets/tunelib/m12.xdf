@@ -1213,16 +1213,6 @@
     <EMBEDDEDDATA mmedaddress="0x34EA" mmedelementsizebits="8" mmedmajorstridebits="0" mmedminorstridebits="0" />
     <mask>0x0B</mask>
   </XDFFLAG>
-  <XDFCONSTANT uniqueid="0x17A2">
-    <title>&#224;&#190;&#168; &#195;&#213;&#225;&#193;&#190;&#193;&#205;&#228;&#171;&#164;&#236;Honda 0832007326</title>
-    <EMBEDDEDDATA mmedelementsizebits="8" mmedmajorstridebits="0" mmedminorstridebits="0" />
-    <datatype>0</datatype>
-    <unittype>0</unittype>
-    <DALINK index="0" />
-    <MATH equation="X">
-      <VAR id="X" />
-    </MATH>
-  </XDFCONSTANT>
   <XDFPATCH uniqueid="0x6025">
     <title>&#203;&#233;&#210;&#193;&#168;&#211;&#203;&#185;&#232;&#210;&#194;&#203;&#195;&#215;&#205;&#225;&#168;&#161;&#191;&#195;&#213;</title>
   </XDFPATCH>

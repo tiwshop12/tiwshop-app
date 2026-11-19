@@ -709,31 +709,6 @@
       </MATH>
     </XDFAXIS>
   </XDFTABLE>
-  <XDFFUNCTION uniqueid="0xC11" flags="0x0">
-    <title>&#168;&#209;&#180;&#183;&#211;&#226;&#180;&#194; &#170;&#232;&#210;&#167;&#183;&#212;&#199;&#224;&#193;&#215;&#205;&#167;&#224;&#197;&#194; 0810124526</title>
-    <XDFAXIS id="x" uniqueid="0x0">
-      <EMBEDDEDDATA mmedelementsizebits="8" mmedmajorstridebits="-32" mmedminorstridebits="0" />
-      <indexcount>1</indexcount>
-      <embedinfo type="1" />
-      <datatype>0</datatype>
-      <unittype>0</unittype>
-      <DALINK index="0" />
-      <MATH equation="X">
-        <VAR id="X" />
-      </MATH>
-    </XDFAXIS>
-    <XDFAXIS id="y" uniqueid="0x0">
-      <EMBEDDEDDATA mmedelementsizebits="8" mmedmajorstridebits="-32" mmedminorstridebits="0" />
-      <indexcount>1</indexcount>
-      <embedinfo type="1" />
-      <datatype>0</datatype>
-      <unittype>0</unittype>
-      <DALINK index="0" />
-      <MATH equation="X">
-        <VAR id="X" />
-      </MATH>
-    </XDFAXIS>
-  </XDFFUNCTION>
   <XDFCHECKSUM uniqueid="0x11BE">
     <title>Honda Bin Size : 48KB [Checksum : 7600]</title>
     <REGION>

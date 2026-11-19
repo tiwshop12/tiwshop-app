@@ -161,6 +161,9 @@ String _eq(String? e) {
   return s.isEmpty ? 'X' : s;
 }
 
+// ชื่อร้านอื่น (ZAR RACING) และเบอร์โทรศัพท์ในไฟล์ XDF -> ตัดทิ้ง
+final _bad = RegExp(r'zar\s*racing|(?<!\d)0\d{1,2}[- ]?\d{3}[- ]?\d{4}(?!\d)', caseSensitive: false);
+
 String? _attr(String src, String name) => RegExp('$name="([^"]*)"').firstMatch(src)?.group(1);
 int? _hex(String? s) {
   if (s == null) return null;
@@ -231,6 +234,7 @@ class XdfDoc {
       final t = m.group(0)!;
       final kind = m.group(1)!;
       final id = _attr(t.substring(0, t.indexOf('>') + 1), 'uniqueid') ?? 'n${out.length}';
+      if (_bad.hasMatch(title(t))) continue;   // ชื่อร้านอื่น / เบอร์โทร ไม่แสดง
       // รายการที่ไม่มีค่าให้แก้ (หัวข้อไม่มีที่อยู่ / แพตช์ว่าง / ฟังก์ชัน / checksum) ไม่ใส่ในรายการ
       if (kind == 'XDFPATCH') {
         final es = <PatchEntry>[];
@@ -311,7 +315,8 @@ class XdfDoc {
       final i = _hex(m[1]); if (i != null) cm[i] = decodeTis620(_entities(m[2]!));
     }
     String hg(String k) => decodeTis620(_entities(RegExp('<$k>([\\s\\S]*?)</$k>').firstMatch(head)?.group(1)?.trim() ?? '')).trim();
-    return XdfDoc(out, title: hg('deftitle'), desc: hg('description'), cats: cm);
+    String clean(String v) => _bad.hasMatch(v) ? '' : v;
+    return XdfDoc(out, title: clean(hg('deftitle')), desc: clean(hg('description')), cats: cm);
   }
 }
 

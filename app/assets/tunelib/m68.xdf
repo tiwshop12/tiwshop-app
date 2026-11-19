@@ -1486,28 +1486,8 @@
     <EMBEDDEDDATA mmedtypeflags="0x02" mmedaddress="0x0D" mmedelementsizebits="8" mmedmajorstridebits="0" mmedminorstridebits="0" />
     <mask>0x02</mask>
   </XDFFLAG>
-  <XDFCONSTANT uniqueid="0x65C1">
-    <title>ZAR RACING</title>
-    <EMBEDDEDDATA mmedelementsizebits="8" mmedmajorstridebits="0" mmedminorstridebits="0" />
-    <datatype>0</datatype>
-    <unittype>0</unittype>
-    <DALINK index="0" />
-    <MATH equation="X">
-      <VAR id="X" />
-    </MATH>
-  </XDFCONSTANT>
   <XDFCONSTANT uniqueid="0x266">
     <title>&#168;&#211;&#203;&#185;&#232;&#210;&#194; &#202;&#210;&#194;&#168;&#217;&#185; &#228;&#191;&#197;&#236;&#195;&#213;&#225;&#193;&#190; </title>
-    <EMBEDDEDDATA mmedelementsizebits="8" mmedmajorstridebits="0" mmedminorstridebits="0" />
-    <datatype>0</datatype>
-    <unittype>0</unittype>
-    <DALINK index="0" />
-    <MATH equation="X">
-      <VAR id="X" />
-    </MATH>
-  </XDFCONSTANT>
-  <XDFCONSTANT uniqueid="0x3D35">
-    <title>ZAR RACING</title>
     <EMBEDDEDDATA mmedelementsizebits="8" mmedmajorstridebits="0" mmedminorstridebits="0" />
     <datatype>0</datatype>
     <unittype>0</unittype>
