@@ -231,7 +231,7 @@ class XdfDoc {
       final t = m.group(0)!;
       final kind = m.group(1)!;
       final id = _attr(t.substring(0, t.indexOf('>') + 1), 'uniqueid') ?? 'n${out.length}';
-      XdfTable info(String note) => XdfTable(id: '$id#${out.length}', title: title(t), kind: ItemKind.info, desc: desc(t), info: note, cats: cats(t));
+      // รายการที่ไม่มีค่าให้แก้ (หัวข้อไม่มีที่อยู่ / แพตช์ว่าง / ฟังก์ชัน / checksum) ไม่ใส่ในรายการ
       if (kind == 'XDFPATCH') {
         final es = <PatchEntry>[];
         for (final em in RegExp(r'<XDFPATCHENTRY\b[^>]*>').allMatches(t)) {
@@ -241,20 +241,16 @@ class XdfDoc {
           if (ad == null || n <= 0) continue;
           es.add(PatchEntry(ad, hexBytes(_attr(e, 'patchdata'), n), hexBytes(_attr(e, 'basedata'), n)));
         }
-        if (es.isEmpty) { out.add(info('ข้อความในไฟล์ XDF (ไม่มีจุดให้แก้)')); continue; }
+        if (es.isEmpty) { continue; }
         out.add(XdfTable(id: id, title: title(t), kind: ItemKind.patch, address: es.first.addr, patches: es, desc: desc(t), cats: cats(t)));
         continue;
       }
-      if (kind == 'XDFFUNCTION') { out.add(info('ฟังก์ชันแปลงค่าใน XDF (ไม่มีข้อมูลให้แก้)')); continue; }
-      if (kind == 'XDFCHECKSUM') {
-        String g(String k) => RegExp('<$k>([^<]*)</$k>').firstMatch(t)?.group(1)?.trim() ?? '-';
-        out.add(info('Checksum ใน XDF\nช่วงข้อมูล ${g('datastart')} - ${g('dataend')}\nเก็บที่ ${g('storeaddress')} · ${g('storesizebits')} บิต · วิธี ${g('calculationmethod')}\nเกจคำนวณ checksum ของกล่องให้เองตอนเขียนไฟล์'));
-        continue;
-      }
+      if (kind == 'XDFFUNCTION') continue;
+      if (kind == 'XDFCHECKSUM') continue;
       if (kind == 'XDFFLAG') {
         final ed = RegExp(r'<EMBEDDEDDATA([^>]*)>').firstMatch(t)?.group(1) ?? '';
         final addr = _hex(_attr(ed, 'mmedaddress'));
-        if (addr == null) { out.add(info('หัวข้อใน XDF (FLAG ไม่มีที่อยู่ ไม่มีค่าให้แก้)')); continue; }
+        if (addr == null) continue;
         final tf = _hex(_attr(ed, 'mmedtypeflags'));
         final bits = (int.tryParse(_attr(ed, 'mmedelementsizebits') ?? '') ?? 8).abs();
         out.add(XdfTable(
@@ -267,7 +263,7 @@ class XdfDoc {
       if (kind == 'XDFCONSTANT') {
         final ed = RegExp(r'<EMBEDDEDDATA([^>]*)>').firstMatch(t)?.group(1) ?? '';
         final addr = _hex(_attr(ed, 'mmedaddress'));
-        if (addr == null) { out.add(info('หัวข้อใน XDF (ค่าคงที่ไม่มีที่อยู่ ไม่มีค่าให้แก้)')); continue; }
+        if (addr == null) continue;
         final tf = _hex(_attr(ed, 'mmedtypeflags'));
         final bits = (int.tryParse(_attr(ed, 'mmedelementsizebits') ?? '') ?? defBits).abs();
         final ot = int.tryParse(RegExp(r'<outputtype>(\d+)').firstMatch(t)?.group(1) ?? '') ?? 1;
@@ -282,11 +278,11 @@ class XdfDoc {
         continue;
       }
       final zm = RegExp(r'<XDFAXIS\s+id="z"[\s\S]*?</XDFAXIS>').firstMatch(t);
-      if (zm == null) { out.add(info('หัวข้อใน XDF (ตารางไม่มีข้อมูล)')); continue; }
+      if (zm == null) continue;
       final z = zm.group(0)!;
       final ed = RegExp(r'<EMBEDDEDDATA([^>]*)>').firstMatch(z)?.group(1) ?? '';
       final addr = _hex(_attr(ed, 'mmedaddress'));
-      if (addr == null) { out.add(info('หัวข้อใน XDF (ตารางไม่มีที่อยู่ ไม่มีค่าให้แก้)')); continue; }
+      if (addr == null) continue;
       final tf = _hex(_attr(ed, 'mmedtypeflags'));
       final bits = (int.tryParse(_attr(ed, 'mmedelementsizebits') ?? '') ?? defBits).abs();
       final rc = math.max(1, int.tryParse(_attr(ed, 'mmedrowcount') ?? '') ?? 1);
@@ -690,7 +686,7 @@ class _TunePageState extends State<TunePage> {
   // รายการพารามิเตอร์ทั้งหมด (Parameter Tree ของ TunerPro) + ค้นหา + กรองชนิด/หมวด
   int _fk = 0; int? _fcat; String _q = '';
   Future<void> _pickParam() async {
-    const fl = ['ทั้งหมด', 'ตาราง', 'ค่าเดียว', 'FLAG', 'แพตช์', 'หมายเหตุ'];
+    const fl = ['ทั้งหมด', 'ตาราง', 'ค่าเดียว', 'FLAG', 'แพตช์'];
     bool ok(XdfTable e) {
       switch (_fk) {
         case 1: if (!(e.isTable && !e.isConst)) return false; break;
