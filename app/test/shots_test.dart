@@ -101,6 +101,10 @@ Future<void> _tapText(WidgetTester t, String s) async {
   await t.pump(const Duration(milliseconds: 400));
 }
 
+Future<void> _ui(WidgetTester t) async {
+  try { await t.pumpAndSettle(const Duration(milliseconds: 100), EnginePhase.sendSemanticsUpdate, const Duration(seconds: 6)); } catch (_) {}
+}
+
 NavigatorState _nav(WidgetTester t) => t.state<NavigatorState>(find.byType(Navigator).first);
 
 Future<void> _pop(WidgetTester t) async {
@@ -232,7 +236,7 @@ void main() {
     final xdf = XdfDoc.parse(String.fromCharCodes(File('assets/tunelib/m33.xdf').readAsBytesSync()));
     final bin = File('assets/tunelib/m33_0.bin').readAsBytesSync();
     await t.pumpWidget(_app(TunePage(fileName: 'PCX160_2023.bin', bin: bin, xdf: xdf, onSave: (n, b) async {}, getRpm: () => 4250, getTps: () => 18)));
-    await t.pump(const Duration(milliseconds: 600));
+    await _ui(t);
     await _shot(t, 'app_10_tune_table');
     // กดค้างแล้วลาก = เลือกหลายช่อง
     final grid = find.byType(GestureDetector).evaluate().where((e) => (e.widget as GestureDetector).onLongPressStart != null).toList();
@@ -250,7 +254,7 @@ void main() {
       await _shot(t, 'app_11_tune_multiselect');
     }
     await _tapText(t, '3D');
-    await t.pump(const Duration(milliseconds: 500));
+    await _ui(t);
     await _shot(t, 'app_12_tune_3d');
     await _tapText(t, 'พรีวิว');
     await t.pump(const Duration(seconds: 2));
@@ -258,44 +262,42 @@ void main() {
     await _tapText(t, 'หยุด');
     // รายการพารามิเตอร์ทั้งหมด
     await t.tap(find.byIcon(Icons.arrow_drop_down).first, warnIfMissed: false);
-    await t.pump(const Duration(milliseconds: 600));
+    await _ui(t);
     await _shot(t, 'app_14_tune_list');
     final patchChip = find.textContaining('แพตช์ ');
     if (patchChip.evaluate().isNotEmpty) {
       await t.tap(patchChip.first, warnIfMissed: false);
-      await t.pump(const Duration(milliseconds: 500));
+      await _ui(t);
       await _shot(t, 'app_15_tune_list_patch');
       // เปิดแพตช์ตัวแรก
       final tiles = find.byType(ListTile);
       if (tiles.evaluate().isNotEmpty) {
         await t.tap(tiles.first, warnIfMissed: false);
-        await t.pump(const Duration(milliseconds: 1500));
-        _nav(t).popUntil((r) => r.isFirst);
-        await t.pump(const Duration(milliseconds: 800));
+        await _ui(t);
         await _shot(t, 'app_16_tune_patch');
       }
     }
     // FLAG
     await t.tap(find.byIcon(Icons.arrow_drop_down).first, warnIfMissed: false);
-    await t.pump(const Duration(milliseconds: 600));
+    await _ui(t);
     final flagChip = find.byType(ChoiceChip);
     debugPrint('chips: ${flagChip.evaluate().length}');
     if (flagChip.evaluate().length > 3) {
       await t.tap(flagChip.at(3), warnIfMissed: false);
-      await t.pump(const Duration(milliseconds: 500));
+      await _ui(t);
       await _shot(t, 'app_17_tune_list_flag');
       final tiles = find.byType(ListTile);
       if (tiles.evaluate().isNotEmpty) {
         final txt = find.descendant(of: tiles.first, matching: find.byType(Text)).first;
         debugPrint('flag tile: ${(t.widget<Text>(txt)).data}');
         await t.tap(txt, warnIfMissed: false);
-        await t.pump(const Duration(milliseconds: 2000));
+        await _ui(t);
         await _shot(t, 'app_18_tune_flag');
       }
     }
     // ขนาดหน้าจูน
     await t.tap(find.byIcon(Icons.format_size).first, warnIfMissed: false);
-    await t.pump(const Duration(milliseconds: 600));
+    await _ui(t);
     await _shot(t, 'app_19_tune_size');
     await t.pumpWidget(const SizedBox());
     await t.pump(const Duration(seconds: 1));
