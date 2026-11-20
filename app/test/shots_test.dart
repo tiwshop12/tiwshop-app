@@ -178,11 +178,11 @@ void main() {
     await t.pump(const Duration(milliseconds: 1500));
     final sc = find.byType(Scrollable);
     if (sc.evaluate().isNotEmpty) {
-      await t.drag(sc.first, const Offset(0, -900), warnIfMissed: false);
-      await t.pump(const Duration(milliseconds: 1200));
+      for (int k = 0; k < 3; k++) { await t.dragFrom(const Offset(300, 300), const Offset(0, -350)); await t.pump(const Duration(milliseconds: 600)); }
+      await t.pump(const Duration(milliseconds: 800));
       await _shot(t, 'app_04_settings_2');
-      await t.drag(sc.first, const Offset(0, 900), warnIfMissed: false);
-      await t.pump(const Duration(milliseconds: 1200));
+      for (int k = 0; k < 4; k++) { await t.dragFrom(const Offset(300, 150), const Offset(0, 350)); await t.pump(const Duration(milliseconds: 600)); }
+      await t.pump(const Duration(milliseconds: 800));
     }
     await _shot(t, 'app_04_settings_1');
     await _pop(t);
@@ -285,10 +285,10 @@ void main() {
       await _shot(t, 'app_17_tune_list_flag');
       final tiles = find.byType(ListTile);
       if (tiles.evaluate().isNotEmpty) {
-        await t.tap(tiles.first, warnIfMissed: false);
-        await t.pump(const Duration(milliseconds: 1500));
-        _nav(t).popUntil((r) => r.isFirst);
-        await t.pump(const Duration(milliseconds: 800));
+        final txt = find.descendant(of: tiles.first, matching: find.byType(Text)).first;
+        debugPrint('flag tile: ${(t.widget<Text>(txt)).data}');
+        await t.tap(txt, warnIfMissed: false);
+        await t.pump(const Duration(milliseconds: 2000));
         await _shot(t, 'app_18_tune_flag');
       }
     }
