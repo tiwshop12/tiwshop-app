@@ -278,9 +278,10 @@ void main() {
     // FLAG
     await t.tap(find.byIcon(Icons.arrow_drop_down).first, warnIfMissed: false);
     await t.pump(const Duration(milliseconds: 600));
-    final flagChip = find.textContaining('FLAG ');
-    if (flagChip.evaluate().isNotEmpty) {
-      await t.tap(flagChip.first, warnIfMissed: false);
+    final flagChip = find.byType(ChoiceChip);
+    debugPrint('chips: ${flagChip.evaluate().length}');
+    if (flagChip.evaluate().length > 3) {
+      await t.tap(flagChip.at(3), warnIfMissed: false);
       await t.pump(const Duration(milliseconds: 500));
       await _shot(t, 'app_17_tune_list_flag');
       final tiles = find.byType(ListTile);
