@@ -124,6 +124,8 @@ void main() {
     final xd = Directory('${_docs.path}/xdf')..createSync(recursive: true);
     File('assets/tunelib/m33.xdf').copySync('${xd.path}/K1ZP-T51_PCX160.xdf');
     await _fonts();
+    kPaintFont = 'Roboto';
+    kPaintFallback = const ['NotoThai'];
     await Cfg.i.load();
   });
 
@@ -174,13 +176,15 @@ void main() {
     // ตั้งค่า
     await t.tap(find.byIcon(Icons.settings).first, warnIfMissed: false);
     await t.pump(const Duration(milliseconds: 1500));
-    await _shot(t, 'app_04_settings_1');
     final sc = find.byType(Scrollable);
     if (sc.evaluate().isNotEmpty) {
       await t.drag(sc.first, const Offset(0, -900), warnIfMissed: false);
       await t.pump(const Duration(milliseconds: 1200));
       await _shot(t, 'app_04_settings_2');
+      await t.drag(sc.first, const Offset(0, 900), warnIfMissed: false);
+      await t.pump(const Duration(milliseconds: 1200));
     }
+    await _shot(t, 'app_04_settings_1');
     await _pop(t);
     // AFR LOG
     // ignore: unawaited_futures
@@ -266,6 +270,8 @@ void main() {
       if (tiles.evaluate().isNotEmpty) {
         await t.tap(tiles.first, warnIfMissed: false);
         await t.pump(const Duration(milliseconds: 1500));
+        _nav(t).popUntil((r) => r.isFirst);
+        await t.pump(const Duration(milliseconds: 800));
         await _shot(t, 'app_16_tune_patch');
       }
     }
@@ -281,6 +287,8 @@ void main() {
       if (tiles.evaluate().isNotEmpty) {
         await t.tap(tiles.first, warnIfMissed: false);
         await t.pump(const Duration(milliseconds: 1500));
+        _nav(t).popUntil((r) => r.isFirst);
+        await t.pump(const Duration(milliseconds: 800));
         await _shot(t, 'app_18_tune_flag');
       }
     }

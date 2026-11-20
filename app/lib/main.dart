@@ -2899,7 +2899,7 @@ class GaugeDialPainter extends CustomPainter {
         }
       }
       final tp = TextPainter(
-        text: TextSpan(text: '$k', style: TextStyle(fontFamily: kFont, fontSize: r * 0.072, color: zone ? const Color(0xFFFF7A7A) : const Color(0xFFFFC233))),
+        text: TextSpan(text: '$k', style: TextStyle(fontFamily: kFont, fontFamilyFallback: kPaintFallback, fontSize: r * 0.072, color: zone ? const Color(0xFFFF7A7A) : const Color(0xFFFFC233))),
         textDirection: TextDirection.ltr,
       )..layout();
       final pos = c + dir * (r * 0.64);
@@ -3405,7 +3405,7 @@ class _TP {
     if (tp == null) {
       if (_m.length > 2500) _m.clear();
       tp = TextPainter(
-        text: TextSpan(text: s, style: TextStyle(fontSize: fs, color: col, fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+        text: TextSpan(text: s, style: TextStyle(fontSize: fs, color: col, fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontFamily: kPaintFont, fontFamilyFallback: kPaintFallback)),
         textDirection: TextDirection.ltr,
         maxLines: 1,
         ellipsis: '…',
@@ -3936,7 +3936,7 @@ void _dtxt(Canvas cv, String s, Offset p, double size, Color col,
     text: TextSpan(
         text: s,
         style: TextStyle(
-            fontSize: size, color: col, fontWeight: w, height: 1.0, fontFamily: family,
+            fontSize: size, color: col, fontWeight: w, height: 1.0, fontFamily: family ?? kPaintFont, fontFamilyFallback: kPaintFallback,
             fontStyle: italic ? FontStyle.italic : FontStyle.normal)),
     textDirection: TextDirection.ltr,
   )..layout();

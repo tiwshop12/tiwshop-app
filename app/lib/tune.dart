@@ -93,6 +93,10 @@ class LinMath {
 // minorstridebits > 0 = ระยะห่างระหว่างจุดเริ่มแต่ละแถว (column-major = แต่ละคอลัมน์)  — ตรวจกับไฟล์จริง 88 รุ่นแล้ว
 // แกน X/Y: embedinfo type 3 + linkobjid = ใช้ค่าตารางอื่น, type 1 = อ่านจาก BIN ตามที่อยู่ของแกน, ไม่มี embedinfo = LABEL คงที่
 // outputtype: 1 ทศนิยม, 2 จำนวนเต็ม, 3 เลขฐาน 16, 4 ตัวอักษร (ASCII)
+// ฟอนต์ของข้อความที่วาดเองใน CustomPainter (null = ฟอนต์ระบบตามปกติ) — ใช้ตอนถ่ายรูปหน้าจออัตโนมัติ
+String? kPaintFont;
+List<String>? kPaintFallback;
+
 enum AxKind { none, rpm, tps }
 // table = ตาราง/ค่าเดียว, flag = ติ๊กบิต, patch = แพตช์ (เช่น ล็อคโหมด / ปลดมัดไฟ / ปิดอิโม), info = หัวข้อ/หมายเหตุ/ฟังก์ชัน/checksum ใน XDF
 enum ItemKind { table, flag, patch, info }
@@ -1231,7 +1235,7 @@ class _LinePainter extends CustomPainter {
     for (int k = 0; k <= 4; k++) {
       final y = top + h * k / 4;
       cv.drawLine(Offset(l, y), Offset(l + w, y), grid);
-      final tp = TextPainter(text: TextSpan(text: bt.fmt(hi - span * k / 4), style: TextStyle(color: Colors.white38, fontSize: 9.5 * ui)), textDirection: TextDirection.ltr)..layout();
+      final tp = TextPainter(text: TextSpan(text: bt.fmt(hi - span * k / 4), style: TextStyle(color: Colors.white38, fontSize: 9.5 * ui, fontFamily: kPaintFont, fontFamilyFallback: kPaintFallback)), textDirection: TextDirection.ltr)..layout();
       tp.paint(cv, Offset(l - tp.width - 4, y - tp.height / 2));
     }
     final path = Path()..moveTo(p(0).dx, p(0).dy);
@@ -1241,7 +1245,7 @@ class _LinePainter extends CustomPainter {
     for (int i = 0; i < n; i++) {
       cv.drawCircle(p(i), 3 * ui, Paint()..color = _heat(v(i), lo, hi));
       if (i % step == 0 && i < labels.length) {
-        final tp = TextPainter(text: TextSpan(text: labels[i], style: TextStyle(color: _kCyan, fontSize: 9.5 * ui)), textDirection: TextDirection.ltr)..layout();
+        final tp = TextPainter(text: TextSpan(text: labels[i], style: TextStyle(color: _kCyan, fontSize: 9.5 * ui, fontFamily: kPaintFont, fontFamilyFallback: kPaintFallback)), textDirection: TextDirection.ltr)..layout();
         tp.paint(cv, Offset(p(i).dx - tp.width / 2, top + h + 8));
       }
     }
@@ -1309,14 +1313,14 @@ class _SurfPainter extends CustomPainter {
     }
     // หัวแกน X (คอลัมน์) และ Y (แถว) บนขอบพื้น
     void lab(String t, Offset at, Color col) {
-      final tp = TextPainter(text: TextSpan(text: t, style: TextStyle(color: col, fontSize: 9 * ui, fontWeight: FontWeight.bold)), textDirection: TextDirection.ltr)..layout();
+      final tp = TextPainter(text: TextSpan(text: t, style: TextStyle(color: col, fontSize: 9 * ui, fontWeight: FontWeight.bold, fontFamily: kPaintFont, fontFamilyFallback: kPaintFallback)), textDirection: TextDirection.ltr)..layout();
       tp.paint(cv, at - Offset(tp.width / 2, tp.height / 2));
     }
     final sx = math.max(1, (C / 6).ceil()), sr = math.max(1, (R / 6).ceil());
     for (int c = 0; c < C; c += sx) { if (c < xa.text.length) lab(xa.text[c], fp(gx(c), 0.62), _kCyan); }
     for (int r = 0; r < R; r += sr) { if (r < ya.text.length) lab(ya.text[r], fp(-0.62, gy(r)), _kYel); }
     // ค่าสูงสุด / ต่ำสุด
-    final tp = TextPainter(text: TextSpan(text: 'สูงสุด ${bt.fmt(hi)}   ต่ำสุด ${bt.fmt(lo)}   ซูม ${(zoom * 100).round()}%', style: TextStyle(color: Colors.white54, fontSize: 10 * ui)), textDirection: TextDirection.ltr)..layout();
+    final tp = TextPainter(text: TextSpan(text: 'สูงสุด ${bt.fmt(hi)}   ต่ำสุด ${bt.fmt(lo)}   ซูม ${(zoom * 100).round()}%', style: TextStyle(color: Colors.white54, fontSize: 10 * ui, fontFamily: kPaintFont, fontFamilyFallback: kPaintFallback)), textDirection: TextDirection.ltr)..layout();
     tp.paint(cv, Offset(8 * ui, 8 * ui));
     if (liveC != null) {
       final lr = liveC! ~/ C, lc = liveC! % C;
