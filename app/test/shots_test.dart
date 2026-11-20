@@ -34,6 +34,8 @@ Future<void> _fonts() async {
   await fam('MaterialIcons', ['$fd/MaterialIcons-Regular.otf']);
   await fam('Ethnocentric', ['assets/fonts/ethnocentric_rg.ttf']);
   await fam('monospace', ['$fd/RobotoMono-Regular.ttf', '$fd/DejaVuSansMono.ttf']);
+  // ตัวอักษรเริ่มต้นของ CustomPainter (TextPainter ที่ไม่ระบุฟอนต์) ในเทสต์ = 'FlutterTest' -> แทนด้วยฟอนต์ไทย+อังกฤษ
+  await fam('FlutterTest', ['$fd/Waree.ttf', '$fd/Waree-Bold.ttf']);
 }
 
 ThemeData _theme() {
@@ -143,6 +145,7 @@ void main() {
     c.link = LinkState.connected;
     c.gaugeName = 'TIWSHOP-9A78';
     c.gpsOk = true;
+    c.graphVisible = true;
     c.toggleDemo();
     // ให้ DEMO วิ่ง ~22 วิ (เวลาจริง) -> มีค่าเปลี่ยน กราฟ / DRAG / TOP SPEED มีข้อมูล
     for (int i = 0; i < 300; i++) {
@@ -150,6 +153,7 @@ void main() {
       await t.pump(const Duration(milliseconds: 70));
       c.link = LinkState.connected;
       c.gpsOk = true;
+      c.graphVisible = true;
     }
     final pv = t.widget<PageView>(find.byType(PageView)).controller!;
     const names = ['dash', 'main', 'grid', 'graph', 'afr', 'drag', 'dtc', 'topspeed'];
@@ -169,14 +173,13 @@ void main() {
     await _pop(t);
     // ตั้งค่า
     await t.tap(find.byIcon(Icons.settings).first, warnIfMissed: false);
-    await t.pump(const Duration(milliseconds: 600));
+    await t.pump(const Duration(milliseconds: 1500));
     await _shot(t, 'app_04_settings_1');
     final sc = find.byType(Scrollable);
-    for (int k = 2; k <= 6; k++) {
-      if (sc.evaluate().isEmpty) break;
-      await t.drag(sc.first, const Offset(0, -330), warnIfMissed: false);
-      await t.pump(const Duration(milliseconds: 500));
-      await _shot(t, 'app_04_settings_$k');
+    if (sc.evaluate().isNotEmpty) {
+      await t.drag(sc.first, const Offset(0, -900), warnIfMissed: false);
+      await t.pump(const Duration(milliseconds: 1200));
+      await _shot(t, 'app_04_settings_2');
     }
     await _pop(t);
     // AFR LOG
@@ -199,18 +202,23 @@ void main() {
     await t.pumpWidget(_app(FlashPage(c: c)));
     for (int i = 0; i < 8; i++) { await _real(t, 120); await t.pump(const Duration(milliseconds: 100)); }
     await _shot(t, 'app_06_flash_library');
+    // เลื่อนการ์ด FLASH CONTROL ขึ้นมา (ระหว่างเขียนกล่อง)
+    c.t = Telemetry(fresh: true, state: 2, proto: 1, batt: 12.6, flashSup: true, flashState: 4, flashPct: 62, flashVendor: 2, fileRx: 2, ecmId: '0105050D01');
+    c.notifyListeners();
+    await t.pump(const Duration(milliseconds: 300));
+    await t.dragFrom(const Offset(150, 330), const Offset(0, -400));
+    await t.pump(const Duration(milliseconds: 900));
+    await _shot(t, 'app_09_flash_writing');
+    await t.dragFrom(const Offset(150, 150), const Offset(0, 600));
+    await t.pump(const Duration(milliseconds: 900));
+    c.t = Telemetry(fresh: true, state: 2, proto: 1, rpm: 0, batt: 12.6, flashSup: true, ecmId: '0105050D01');
+    c.notifyListeners();
     await _tapText(t, 'ไฟล์ของฉัน');
     for (int i = 0; i < 4; i++) { await _real(t, 100); await t.pump(const Duration(milliseconds: 100)); }
     await _shot(t, 'app_07_flash_myfiles');
     await _tapText(t, 'XDF');
     for (int i = 0; i < 4; i++) { await _real(t, 100); await t.pump(const Duration(milliseconds: 100)); }
     await _shot(t, 'app_08_flash_xdf');
-    // ระหว่างเขียนกล่อง
-    c.t = Telemetry(fresh: true, state: 2, proto: 1, batt: 12.6, flashSup: true, flashState: 4, flashPct: 62, flashVendor: 1, fileRx: 2, ecmId: '0105050D01');
-    c.notifyListeners();
-    await _tapText(t, 'คลังจูน');
-    for (int i = 0; i < 4; i++) { await _real(t, 100); await t.pump(const Duration(milliseconds: 100)); }
-    await _shot(t, 'app_09_flash_writing');
     await t.pumpWidget(const SizedBox());
     await t.pump(const Duration(seconds: 1));
   });
@@ -257,7 +265,7 @@ void main() {
       final tiles = find.byType(ListTile);
       if (tiles.evaluate().isNotEmpty) {
         await t.tap(tiles.first, warnIfMissed: false);
-        await t.pump(const Duration(milliseconds: 600));
+        await t.pump(const Duration(milliseconds: 1500));
         await _shot(t, 'app_16_tune_patch');
       }
     }
@@ -272,7 +280,7 @@ void main() {
       final tiles = find.byType(ListTile);
       if (tiles.evaluate().isNotEmpty) {
         await t.tap(tiles.first, warnIfMissed: false);
-        await t.pump(const Duration(milliseconds: 600));
+        await t.pump(const Duration(milliseconds: 1500));
         await _shot(t, 'app_18_tune_flag');
       }
     }

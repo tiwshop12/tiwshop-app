@@ -22,9 +22,9 @@ jobs:
       - name: Fonts for screenshots
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq fonts-roboto-unhinted fonts-noto-core fonts-dejavu-core >/dev/null
+          sudo apt-get install -y -qq fonts-roboto-unhinted fonts-noto-core fonts-dejavu-core fonts-tlwg-waree-ttf >/dev/null
           mkdir -p build/fonts
-          for n in Roboto-Regular.ttf Roboto-Medium.ttf Roboto-Bold.ttf NotoSansThai-Regular.ttf NotoSansThai-Bold.ttf DejaVuSansMono.ttf; do
+          for n in Roboto-Regular.ttf Roboto-Medium.ttf Roboto-Bold.ttf NotoSansThai-Regular.ttf NotoSansThai-Bold.ttf DejaVuSansMono.ttf Waree.ttf Waree-Bold.ttf; do
             f=$(find /usr/share/fonts -name "$n" | head -1); [ -n "$f" ] && cp "$f" build/fonts/ || echo "missing $n"
           done
           FR=${FLUTTER_ROOT:-$(dirname $(dirname $(which flutter)))}
