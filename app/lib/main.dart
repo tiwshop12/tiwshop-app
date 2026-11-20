@@ -28,6 +28,8 @@ final Guid kImg = Guid('7a0f0004-5a41-5201-9c11-2a52a1c0de01');
 final Guid kFile = Guid('7a0f0005-5a41-5201-9c11-2a52a1c0de01'); // ส่งไฟล์ .bin ไปเขียนกล่อง ECU
 
 const kFont = 'Ethnocentric';
+// ถ่ายรูปหน้าจอแอพอัตโนมัติ (test/shots_test.dart): ไม่เรียก GPS / ล็อกจอ
+bool kShotMode = false;
 const kGreen = Color(0xFF3CFF8A);
 const kAmber = Color(0xFFFFB020);
 const kBad = Color(0xFFFF4D4D);
@@ -334,6 +336,8 @@ enum LinkState { idle, scanning, connecting, connected }
 
 // ---------- ตัวจัดการ BLE + GPS + Demo ----------
 class GaugeController extends ChangeNotifier {
+  static GaugeController? last; // ตัวล่าสุดที่สร้าง (ใช้ตอนถ่ายรูปหน้าจอ)
+  GaugeController() { last = this; }
   // TIWSHOP: แจ้งหน้าจอไม่เกิน ~30 ครั้ง/วินาที (เดิมแจ้งทุกแพ็กเกจ BLE + GPS + ดาวเทียม + DEMO = วาดทั้งหน้าซ้ำถี่เกิน -> แอพหน่วง/ค้าง)
   static const int _uiMinMs = 33;
   int _lastNotifyMs = 0;
@@ -643,11 +647,11 @@ class GaugeController extends ChangeNotifier {
   }
 
   Future<void> init() async {
-    await WakelockPlus.enable();
+    if (!kShotMode) await WakelockPlus.enable();
     _gTimer?.cancel();
     _gTimer = Timer.periodic(const Duration(milliseconds: 200), (_) => _gSample());
     _dragLoad();
-    await _startGps();
+    if (!kShotMode) await _startGps();
   }
 
   Future<void> _startGps() async {

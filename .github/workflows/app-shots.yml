@@ -1,0 +1,44 @@
+name: App screenshots
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Fonts for screenshots
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-roboto-unhinted fonts-noto-core fonts-dejavu-core >/dev/null
+          mkdir -p build/fonts
+          for n in Roboto-Regular.ttf Roboto-Medium.ttf Roboto-Bold.ttf NotoSansThai-Regular.ttf NotoSansThai-Bold.ttf DejaVuSansMono.ttf; do
+            f=$(find /usr/share/fonts -name "$n" | head -1); [ -n "$f" ] && cp "$f" build/fonts/ || echo "missing $n"
+          done
+          FR=${FLUTTER_ROOT:-$(dirname $(dirname $(which flutter)))}
+          cp "$FR/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf" build/fonts/ || echo "missing icons"
+          ls -la build/fonts
+      - name: Take screenshots
+        run: flutter test test/shots_test.dart 2>&1 | tee build/shots.log || true
+      - name: Publish
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p build/shots
+          cp build/shots.log build/shots/ 2>/dev/null || true
+          cd build && zip -qr app_shots.zip shots && cd ..
+          gh release view app-shots >/dev/null 2>&1 || gh release create app-shots --title "app-shots (internal)" --notes "app screenshots" --prerelease
+          gh release upload app-shots build/app_shots.zip --clobber
