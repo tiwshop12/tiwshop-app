@@ -1269,8 +1269,8 @@ class _SurfPainter extends CustomPainter {
   void paint(Canvas cv, Size s) {
     final R = bt.rows, C = bt.cols;
     if (R < 2 || C < 2) return;
-    final cx = s.width / 2 + pan.dx, cy = s.height * 0.47 + pan.dy;
-    final scale = math.min(s.width * 0.62, s.height * 0.95) * zoom;
+    final cx = s.width / 2 + pan.dx, cy = s.height * 0.44 + pan.dy;
+    final scale = math.min(s.width * 0.6, s.height * 0.8) * zoom;
     final zr = (hi - lo).abs() < 1e-6 ? 1.0 : (hi - lo);
     final cy0 = math.cos(yaw), sy0 = math.sin(yaw), cp = math.cos(pitch), sp = math.sin(pitch);
     // (x, y, z) ใน -0.5..0.5 -> จุดบนจอ + ความลึก
