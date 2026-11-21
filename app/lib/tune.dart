@@ -1348,8 +1348,9 @@ class _SurfPainter extends CustomPainter {
     _txt(cv, title, Offset(s.width / 2, 16 * ui), Colors.black87, 15, ay: 0, bold: true);
     _txt(cv, 'TIWSHOP · สูงสุด ${bt.fmt(hi)}  ต่ำสุด ${bt.fmt(lo)}  ซูม ${(zoom * 100).round()}%', Offset(s.width / 2, 36 * ui), Colors.black45, 9.5, ay: 0);
     if (R < 2 || C < 2) return;
-    final cx = s.width / 2 + pan.dx, cy = s.height * 0.56 + pan.dy;
-    final scale = math.min(s.width * 0.55, s.height * 0.78) * zoom;
+    final top = 50.0 * ui, bot = 26.0 * ui;
+    final cx = s.width / 2 - 20 * ui + pan.dx, cy = top + (s.height - top - bot) / 2 + pan.dy;
+    final scale = math.min((s.width - 190 * ui) / 1.35, (s.height - top - bot) / 1.3) * zoom;
     const zs = 0.85; // ความสูงกล่องเทียบกับความกว้าง
     final cyw = math.cos(yaw), syw = math.sin(yaw), ce = math.cos(pitch), se = math.sin(pitch);
     (Offset, double) prj(double x, double y, double z) {
@@ -1428,7 +1429,7 @@ class _SurfPainter extends CustomPainter {
     final nh = rpmRows ? R : C, nd = rpmRows ? C : R;
     double hpos(int i) => rpmRows ? -rf(i) : (rpmCols ? -cf(i) : cf(i));
     double dpos(int i) => rpmRows ? -cf(i) : -rf(i);
-    final sh = math.max(1, (nh / 10).ceil()), sd = math.max(1, (nd / 10).ceil());
+    final sh = math.max(1, (nh / 8).ceil()), sd = math.max(1, (nd / 7).ceil());
     for (int i = 0; i < nh; i += sh) {
       if (i < hAxis.text.length) _txt(cv, hAxis.text[i], P(hpos(i), 0.5, -0.5) + Offset(0, 9 * ui), const Color(0xFFE02020), 9);
     }
