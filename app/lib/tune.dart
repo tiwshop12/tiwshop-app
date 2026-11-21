@@ -507,7 +507,14 @@ class _TunePageState extends State<TunePage> {
   Offset? _dragG; Timer? _edgeTimer;
   double _gcw = 44, _gch = 26, _ghw = 40;
   // 3D
-  double _yaw = -0.6, _pitch = 0.9, _zoom = 1, _zoom0 = 1;
+  static const _yaw0 = 0.12, _pitch0 = 0.5; // มุมเริ่มต้นแบบ TunerPro: มองจากด้านหน้า เงยขึ้นเล็กน้อย
+  double _yaw = _yaw0, _pitch = _pitch0, _zoom = 1, _zoom0 = 1;
+  bool _edit3d = false; // โหมดดึงกราฟ (ลากจุดขึ้น/ลง = ปรับค่า)
+  final _sc = _SurfCache();
+  List<int>? _dragCells;
+  Map<int, double> _dragBase = {};
+  double _dragUnit = 1;
+  Offset _drag0 = Offset.zero;
   Offset _pan = Offset.zero;
   bool _spin = false; Timer? _spinT;
 
@@ -1185,32 +1192,78 @@ class _TunePageState extends State<TunePage> {
     _spin = on; _spinT?.cancel(); _spinT = null;
     if (on) _spinT = Timer.periodic(const Duration(milliseconds: 33), (_) { if (mounted) setState(() => _yaw += 0.006); });
   }
+  (double, double) _zRange() {
+    final a = t.tmin, b = t.tmax, span = math.max(1e-9, cHi - cLo);
+    if (b > a && a <= cLo + 1e-9 && b >= cHi - 1e-9 && (b - a) <= 4 * span) return (a, b);
+    return (cLo, cHi + span * 0.05);
+  }
+
+  int? _hit3d(Offset p) {
+    int? best; double bd = s(30) * s(30);
+    for (int k = 0; k < _sc.pts.length; k++) {
+      final d = (_sc.pts[k] - p).distanceSquared;
+      if (d < bd) { bd = d; best = k; }
+    }
+    return best;
+  }
+
+  void _reset3d() { _zoom = 1; _pan = Offset.zero; _yaw = _yaw0; _pitch = _pitch0; }
+
   Widget _surface3d(int? liveC) {
+    final (zlo, zhi) = _zRange();
     return Stack(children: [
       Positioned.fill(child: GestureDetector(
-        onScaleStart: (d) { _zoom0 = _zoom; },
+        onScaleStart: (d) {
+          _zoom0 = _zoom;
+          _dragCells = null;
+          if (d.pointerCount >= 2 || !_edit3d) return;
+          final k = _hit3d(d.localFocalPoint);
+          if (k == null) return;
+          if (!sel.contains(k)) { sel..clear()..add(k); }
+          _pushUndo();
+          _dragCells = sel.toList();
+          _dragBase = {for (final c in _dragCells!) c: bt.disp(c ~/ bt.cols, c % bt.cols)};
+          _dragUnit = math.max(1.0, _sc.unit[k]);
+          _drag0 = d.localFocalPoint;
+          HapticFeedback.selectionClick();
+          setState(() {});
+        },
         onScaleUpdate: (d) => setState(() {
           if (d.pointerCount >= 2) {
             _zoom = (_zoom0 * d.scale).clamp(0.4, 5.0);
             _pan += d.focalPointDelta;
-          } else {
+          } else if (_dragCells != null) {
+            // ลากขึ้น = ค่าเพิ่ม · ลากลง = ค่าลด (ทุกจุดที่เลือก)
+            final delta = -(d.localFocalPoint.dy - _drag0.dy) / _dragUnit * (zhi - zlo);
+            for (final c in _dragCells!) { bt.setDisp(c ~/ bt.cols, c % bt.cols, _dragBase[c]! + delta); }
+          } else if (!_edit3d) {
             _yaw += d.focalPointDelta.dx * 0.01;
-            _pitch = (_pitch - d.focalPointDelta.dy * 0.01).clamp(0.05, 1.5);
+            _pitch = (_pitch + d.focalPointDelta.dy * 0.01).clamp(0.0, 1.45);
           }
         }),
-        onDoubleTap: () => setState(() { _zoom = 1; _pan = Offset.zero; _yaw = -0.6; _pitch = 0.9; }),
-        child: CustomPaint(painter: _SurfPainter(bt, cLo, cHi, _yaw, _pitch, _zoom, _pan, liveC, xa, ya, ui), size: Size.infinite),
+        onScaleEnd: (_) { if (_dragCells != null) { _dragCells = null; _afterEdit(); } },
+        onTapUp: (d) {
+          if (!_edit3d) return;
+          final k = _hit3d(d.localPosition);
+          setState(() { if (k == null) { sel.clear(); } else if (sel.contains(k)) { sel.remove(k); } else { sel.add(k); } });
+        },
+        onDoubleTap: () => setState(_reset3d),
+        child: CustomPaint(painter: _SurfPainter(bt, cLo, cHi, zlo, zhi, _yaw, _pitch, _zoom, _pan, liveC, xa, ya, ui, sel, _sc, t.title, _dragCells?.first), size: Size.infinite),
       )),
       Positioned(right: s(8), top: s(8), child: Column(children: [
         _tb(_spin ? Icons.pause : Icons.threesixty, _spin ? 'หยุด' : 'พรีวิว', () => setState(() => _setSpin(!_spin)), col: _kMag, on: _spin),
+        SizedBox(height: s(6)),
+        _tb(Icons.open_with, 'ดึงค่า', () => setState(() { _edit3d = !_edit3d; if (_edit3d) _setSpin(false); }), col: _kOrg, on: _edit3d),
         SizedBox(height: s(6)),
         _tb(Icons.zoom_in, '', () => setState(() => _zoom = (_zoom * 1.25).clamp(0.4, 5.0)), col: _kCyan),
         SizedBox(height: s(6)),
         _tb(Icons.zoom_out, '', () => setState(() => _zoom = (_zoom / 1.25).clamp(0.4, 5.0)), col: _kCyan),
         SizedBox(height: s(6)),
-        _tb(Icons.center_focus_strong, '', () => setState(() { _zoom = 1; _pan = Offset.zero; _yaw = -0.6; _pitch = 0.9; }), col: Colors.white70),
+        _tb(Icons.center_focus_strong, '', () => setState(_reset3d), col: Colors.white70),
       ])),
-      Positioned(left: s(8), bottom: s(6), child: Text('ลาก = หมุน · 2 นิ้ว = ซูม/เลื่อน · แตะ 2 ครั้ง = มุมเริ่มต้น', style: TextStyle(color: Colors.white38, fontSize: s(9.5)))),
+      Positioned(left: s(8), bottom: s(6), child: Text(
+        _edit3d ? 'โหมดดึงค่า: แตะจุด = เลือก/ยกเลิก · ลากจุดขึ้น-ลง = ปรับค่า (ทุกจุดที่เลือก) · 2 นิ้ว = ซูม' : 'ลาก = หมุน · 2 นิ้ว = ซูม/เลื่อน · แตะ 2 ครั้ง = มุมเริ่มต้น · กด "ดึงค่า" เพื่อลากแก้ค่าบนกราฟ',
+        style: TextStyle(color: Colors.black54, fontSize: s(9.5)))),
     ]);
   }
 }
@@ -1257,45 +1310,100 @@ class _LinePainter extends CustomPainter {
   bool shouldRepaint(_LinePainter o) => true;
 }
 
-// พื้นผิว 3 มิติ: วาดจากไกลไปใกล้ (เรียงตามความลึก) + พื้น/แกน/ตัวเลขหัวแกน + ซูม/เลื่อน
+// พื้นผิว 3 มิติ แบบ TunerPro: พื้นขาว · กล่องแกน · สีน้ำเงิน→ฟ้า→เขียว · แกนรอบเครื่องด้านหน้า (สูงอยู่ซ้าย) · แกน TPS/MAP ด้านซ้าย
+class _SurfCache {
+  List<Offset> pts = const [];   // ตำแหน่งบนจอของทุกช่อง (r*cols+c)
+  List<double> unit = const [];  // จำนวนพิกเซลต่อช่วงค่าเต็มแกน ณ จุดนั้น (ใช้ตอนลากแก้ค่า)
+}
+
 class _SurfPainter extends CustomPainter {
   final BinTable bt;
-  final double lo, hi, yaw, pitch, zoom, ui;
+  final double lo, hi, zlo, zhi, yaw, pitch, zoom, ui;
   final Offset pan;
-  final int? liveC;
+  final int? liveC, dragK;
   final AxisView xa, ya;
-  _SurfPainter(this.bt, this.lo, this.hi, this.yaw, this.pitch, this.zoom, this.pan, this.liveC, this.xa, this.ya, this.ui);
+  final Set<int> sel;
+  final _SurfCache cache;
+  final String title;
+  _SurfPainter(this.bt, this.lo, this.hi, this.zlo, this.zhi, this.yaw, this.pitch, this.zoom, this.pan, this.liveC, this.xa, this.ya, this.ui, this.sel, this.cache, this.title, this.dragK);
+
+  static Color tpColor(double t) {
+    t = t.clamp(0.0, 1.0);
+    const a = Color(0xFF0A1EFF), m = Color(0xFF00E8F0), b = Color(0xFF1EF01E);
+    return t < 0.5 ? Color.lerp(a, m, t * 2)! : Color.lerp(m, b, (t - 0.5) * 2)!;
+  }
+
+  void _txt(Canvas cv, String s, Offset at, Color col, double size, {double ax = 0.5, double ay = 0.5, bool bold = false}) {
+    final tp = TextPainter(
+        text: TextSpan(text: s, style: TextStyle(color: col, fontSize: size * ui, fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontFamily: kPaintFont, fontFamilyFallback: kPaintFallback)),
+        textDirection: TextDirection.ltr)
+      ..layout();
+    tp.paint(cv, at - Offset(tp.width * ax, tp.height * ay));
+  }
+
   @override
   void paint(Canvas cv, Size s) {
+    cv.drawRect(Offset.zero & s, Paint()..color = const Color(0xFFFAFAFA));
     final R = bt.rows, C = bt.cols;
+    _txt(cv, title, Offset(s.width / 2, 16 * ui), Colors.black87, 15, ay: 0, bold: true);
+    _txt(cv, 'TIWSHOP · สูงสุด ${bt.fmt(hi)}  ต่ำสุด ${bt.fmt(lo)}  ซูม ${(zoom * 100).round()}%', Offset(s.width / 2, 36 * ui), Colors.black45, 9.5, ay: 0);
     if (R < 2 || C < 2) return;
-    final cx = s.width / 2 + pan.dx, cy = s.height * 0.44 + pan.dy;
-    final scale = math.min(s.width * 0.6, s.height * 0.8) * zoom;
-    final zr = (hi - lo).abs() < 1e-6 ? 1.0 : (hi - lo);
-    final cy0 = math.cos(yaw), sy0 = math.sin(yaw), cp = math.cos(pitch), sp = math.sin(pitch);
-    // (x, y, z) ใน -0.5..0.5 -> จุดบนจอ + ความลึก
+    final cx = s.width / 2 + pan.dx, cy = s.height * 0.56 + pan.dy;
+    final scale = math.min(s.width * 0.55, s.height * 0.78) * zoom;
+    const zs = 0.85; // ความสูงกล่องเทียบกับความกว้าง
+    final cyw = math.cos(yaw), syw = math.sin(yaw), ce = math.cos(pitch), se = math.sin(pitch);
     (Offset, double) prj(double x, double y, double z) {
-      final rx = x * cy0 - y * sy0;
-      final ry = x * sy0 + y * cy0;
-      final py = ry * cp - z * 0.6 * sp;
-      final depth = ry * sp + z * 0.6 * cp;
-      final f = 1.0 / (1.6 - depth * 0.4);
-      return (Offset(cx + rx * scale * f, cy + py * scale * f), depth);
+      final rx = x * cyw - y * syw;
+      final ry = x * syw + y * cyw; // + = ด้านหน้า (ใกล้คนดู)
+      final zz = z * zs;
+      final depth = ry * ce + zz * se;
+      final py = ry * se - zz * ce;
+      final f = 1.0 / (1.9 - depth * 0.55);
+      return (Offset(cx + rx * scale * f * 1.15, cy + py * scale * f), depth);
     }
-    // แกน TPS/MAP ไว้ซ้าย แกนรอบเครื่องไว้ขวา (ถ้าแถวเป็นรอบเครื่อง -> สลับแกนในภาพ 3D)
-    final swap = ya.kind == AxKind.rpm && xa.kind != AxKind.rpm;
+    // แกนนอน = รอบเครื่อง (รอบสูงอยู่ซ้าย แบบ TunerPro) · แกนลึก = TPS/MAP (0 อยู่ด้านหน้า)
+    final rpmRows = ya.kind == AxKind.rpm && xa.kind != AxKind.rpm;
+    final rpmCols = xa.kind == AxKind.rpm;
     double rf(int r) => r / (R - 1) - 0.5;
     double cf(int c) => c / (C - 1) - 0.5;
-    double gz(int r, int c) => (bt.disp(r, c) - lo) / zr - 0.5;
-    (Offset, double) pq(double a, double b, double z) => swap ? prj(a, b, z) : prj(b, a, z); // a = ตำแหน่งแถว, b = ตำแหน่งคอลัมน์
-    final pts = List.generate(R, (r) => List.generate(C, (c) => pq(rf(r), cf(c), gz(r, c))));
-    // พื้น + เส้นกริด
-    final floor = Paint()..style = PaintingStyle.stroke..color = Colors.white12..strokeWidth = 1;
-    Offset fp(double a, double b) => pq(a, b, -0.5).$1;
-    for (int c = 0; c < C; c += math.max(1, (C / 8).ceil())) { cv.drawLine(fp(-0.5, cf(c)), fp(0.5, cf(c)), floor); }
-    for (int r = 0; r < R; r += math.max(1, (R / 8).ceil())) { cv.drawLine(fp(rf(r), -0.5), fp(rf(r), 0.5), floor); }
-    cv.drawPath(Path()..addPolygon([fp(-0.5, -0.5), fp(0.5, -0.5), fp(0.5, 0.5), fp(-0.5, 0.5)], true), Paint()..style = PaintingStyle.stroke..color = Colors.white24..strokeWidth = 1.2);
-    // สี่เหลี่ยมเรียงจากไกลไปใกล้
+    double hx(int r, int c) => rpmRows ? -rf(r) : (rpmCols ? -cf(c) : cf(c));
+    double dy(int r, int c) => rpmRows ? -cf(c) : -rf(r);
+    final zr = (zhi - zlo).abs() < 1e-9 ? 1.0 : (zhi - zlo);
+    double gz(int r, int c) => (bt.disp(r, c) - zlo) / zr - 0.5;
+    final pts = List.generate(R, (r) => List.generate(C, (c) => prj(hx(r, c), dy(r, c), gz(r, c))));
+    // ---------- กล่องแกน: พื้น + ผนังหลัง + ผนังข้าง พร้อมเส้นประระดับค่า ----------
+    Offset P(double x, double y, double z) => prj(x, y, z).$1;
+    final box = Paint()..style = PaintingStyle.stroke..color = Colors.black54..strokeWidth = 1;
+    final dash = Paint()..style = PaintingStyle.stroke..color = Colors.black26..strokeWidth = 1;
+    void dashed(Offset a, Offset b) {
+      final n = ((b - a).distance / 6).floor();
+      for (int i = 0; i < n; i += 2) { cv.drawLine(Offset.lerp(a, b, i / n)!, Offset.lerp(a, b, (i + 1) / n)!, dash); }
+    }
+    const nt = 7;
+    // ผนังหลัง (y = -0.5) และผนังขวา (x = 0.5)
+    for (int k = 1; k <= nt; k++) {
+      final z = -0.5 + k / nt;
+      dashed(P(-0.5, -0.5, z), P(0.5, -0.5, z));
+      dashed(P(0.5, -0.5, z), P(0.5, 0.5, z));
+    }
+    cv.drawPath(Path()..addPolygon([P(-0.5, -0.5, -0.5), P(-0.5, -0.5, 0.5), P(0.5, -0.5, 0.5), P(0.5, -0.5, -0.5)], true), box);
+    cv.drawPath(Path()..addPolygon([P(0.5, -0.5, 0.5), P(0.5, 0.5, 0.5), P(0.5, 0.5, -0.5)], false), box);
+    cv.drawPath(Path()..addPolygon([P(-0.5, -0.5, -0.5), P(-0.5, 0.5, -0.5), P(0.5, 0.5, -0.5), P(0.5, -0.5, -0.5)], true), box);
+    // เส้นพื้นตามแกน
+    final floorL = Paint()..color = Colors.black12..strokeWidth = 1;
+    for (int k = 0; k < 8; k++) {
+      final f = -0.5 + k / 7;
+      cv.drawLine(P(f, -0.5, -0.5), P(f, 0.5, -0.5), floorL);
+      cv.drawLine(P(-0.5, f, -0.5), P(0.5, f, -0.5), floorL);
+    }
+    // ตัวเลขแกนค่า (ซ้ายผนังหลัง + ขวาด้านหน้า) สีน้ำเงินแบบ TunerPro
+    for (int k = 0; k <= nt; k++) {
+      final z = -0.5 + k / nt, v = zlo + zr * k / nt;
+      final str = v.abs() >= 100 ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+      if (k > 0) _txt(cv, str, P(-0.5, -0.5, z) - Offset(6 * ui, 0), const Color(0xFF1A3CFF), 9, ax: 1);
+      if (k > 0) _txt(cv, str, P(0.5, 0.5, z) + Offset(6 * ui, 0), const Color(0xFF1A3CFF), 9, ax: 0);
+    }
+    // ---------- พื้นผิว: วาดจากไกลไปใกล้ ----------
     final quads = <(double, int, int)>[];
     for (int r = 0; r < R - 1; r++) {
       for (int c = 0; c < C - 1; c++) {
@@ -1304,34 +1412,59 @@ class _SurfPainter extends CustomPainter {
     }
     quads.sort((a, b) => a.$1.compareTo(b.$1));
     final fill = Paint()..style = PaintingStyle.fill;
-    final edge = Paint()..style = PaintingStyle.stroke..color = Colors.black38..strokeWidth = 0.5;
+    final edge = Paint()..style = PaintingStyle.stroke..color = Colors.black87..strokeWidth = 0.7;
+    final span = (hi - lo).abs() < 1e-9 ? 1.0 : (hi - lo);
     for (final q in quads) {
       final r = q.$2, c = q.$3;
       final p0 = pts[r][c].$1, p1 = pts[r][c + 1].$1, p2 = pts[r + 1][c + 1].$1, p3 = pts[r + 1][c].$1;
       final vavg = (bt.disp(r, c) + bt.disp(r, c + 1) + bt.disp(r + 1, c + 1) + bt.disp(r + 1, c)) / 4;
-      fill.color = _heat(vavg, lo, hi);
+      fill.color = tpColor((vavg - lo) / span);
       final path = Path()..moveTo(p0.dx, p0.dy)..lineTo(p1.dx, p1.dy)..lineTo(p2.dx, p2.dy)..lineTo(p3.dx, p3.dy)..close();
       cv.drawPath(path, fill);
       cv.drawPath(path, edge);
     }
-    // หัวแกน X (คอลัมน์) และ Y (แถว) บนขอบพื้น
-    void lab(String t, Offset at, Color col) {
-      final tp = TextPainter(text: TextSpan(text: t, style: TextStyle(color: col, fontSize: 9 * ui, fontWeight: FontWeight.bold, fontFamily: kPaintFont, fontFamilyFallback: kPaintFallback)), textDirection: TextDirection.ltr)..layout();
-      tp.paint(cv, at - Offset(tp.width / 2, tp.height / 2));
+    // ---------- ตัวเลขแกน: รอบเครื่องด้านหน้า (แดง) · TPS/MAP ด้านซ้าย (ดำ) ----------
+    final hAxis = rpmRows ? ya : xa, dAxis = rpmRows ? xa : ya;
+    final nh = rpmRows ? R : C, nd = rpmRows ? C : R;
+    double hpos(int i) => rpmRows ? -rf(i) : (rpmCols ? -cf(i) : cf(i));
+    double dpos(int i) => rpmRows ? -cf(i) : -rf(i);
+    final sh = math.max(1, (nh / 10).ceil()), sd = math.max(1, (nd / 10).ceil());
+    for (int i = 0; i < nh; i += sh) {
+      if (i < hAxis.text.length) _txt(cv, hAxis.text[i], P(hpos(i), 0.5, -0.5) + Offset(0, 9 * ui), const Color(0xFFE02020), 9);
     }
-    final sx = math.max(1, (C / 6).ceil()), sr = math.max(1, (R / 6).ceil());
-    for (int c = 0; c < C; c += sx) { if (c < xa.text.length) lab(xa.text[c], fp(swap ? -0.62 : 0.62, cf(c)), _kCyan); }
-    for (int r = 0; r < R; r += sr) { if (r < ya.text.length) lab(ya.text[r], fp(rf(r), swap ? 0.62 : -0.62), _kYel); }
-    // ค่าสูงสุด / ต่ำสุด
-    final tp = TextPainter(text: TextSpan(text: 'สูงสุด ${bt.fmt(hi)}   ต่ำสุด ${bt.fmt(lo)}   ซูม ${(zoom * 100).round()}%', style: TextStyle(color: Colors.white54, fontSize: 10 * ui, fontFamily: kPaintFont, fontFamilyFallback: kPaintFallback)), textDirection: TextDirection.ltr)..layout();
-    tp.paint(cv, Offset(8 * ui, 8 * ui));
-    if (liveC != null) {
-      final lr = liveC! ~/ C, lc = liveC! % C;
-      final p = pts[lr][lc].$1;
-      cv.drawCircle(p, 6 * ui, Paint()..color = Colors.white);
-      cv.drawCircle(p, 6 * ui, Paint()..style = PaintingStyle.stroke..color = _kMag..strokeWidth = 2);
+    for (int i = 0; i < nd; i += sd) {
+      if (i < dAxis.text.length) _txt(cv, dAxis.text[i], P(-0.5, dpos(i), -0.5) - Offset(5 * ui, 0), Colors.black87, 9, ax: 1);
+    }
+    // ---------- จุดที่เลือก (จุดน้ำเงิน) · จุดที่เครื่องอยู่ (วงชมพู) ----------
+    final flat = <Offset>[], unit = <double>[];
+    for (int r = 0; r < R; r++) {
+      for (int c = 0; c < C; c++) {
+        flat.add(pts[r][c].$1);
+        unit.add((P(hx(r, c), dy(r, c), 0.5) - P(hx(r, c), dy(r, c), -0.5)).distance);
+      }
+    }
+    cache.pts = flat;
+    cache.unit = unit;
+    final dot = Paint()..color = const Color(0xFF1030D0);
+    final ring = Paint()..style = PaintingStyle.stroke..color = Colors.white..strokeWidth = 1.5;
+    for (final k in sel) {
+      if (k >= flat.length) continue;
+      cv.drawCircle(flat[k], 4.5 * ui, dot);
+      cv.drawCircle(flat[k], 4.5 * ui, ring);
+    }
+    if (liveC != null && liveC! < flat.length) {
+      cv.drawCircle(flat[liveC!], 7 * ui, Paint()..style = PaintingStyle.stroke..color = const Color(0xFFE040FB)..strokeWidth = 2.5);
+    }
+    if (dragK != null && dragK! < flat.length) {
+      final v = bt.disp(dragK! ~/ C, dragK! % C);
+      final at = flat[dragK!] - Offset(0, 22 * ui);
+      final tp = TextPainter(text: TextSpan(text: ' ${bt.fmt(v)} ', style: TextStyle(color: Colors.white, fontSize: 12 * ui, fontWeight: FontWeight.bold, fontFamily: kPaintFont, fontFamilyFallback: kPaintFallback)), textDirection: TextDirection.ltr)..layout();
+      final rect = Rect.fromCenter(center: at, width: tp.width + 8, height: tp.height + 4);
+      cv.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(5)), Paint()..color = const Color(0xFF1030D0));
+      tp.paint(cv, rect.topLeft + const Offset(4, 2));
     }
   }
+
   @override
   bool shouldRepaint(_SurfPainter o) => true;
 }
