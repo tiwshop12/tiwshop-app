@@ -1263,7 +1263,7 @@ class _TunePageState extends State<TunePage> {
       ])),
       Positioned(left: s(8), bottom: s(6), child: Text(
         _edit3d ? 'โหมดดึงค่า: แตะจุด = เลือก/ยกเลิก · ลากจุดขึ้น-ลง = ปรับค่า (ทุกจุดที่เลือก) · 2 นิ้ว = ซูม' : 'ลาก = หมุน · 2 นิ้ว = ซูม/เลื่อน · แตะ 2 ครั้ง = มุมเริ่มต้น · กด "ดึงค่า" เพื่อลากแก้ค่าบนกราฟ',
-        style: TextStyle(color: Colors.black54, fontSize: s(9.5)))),
+        style: TextStyle(color: Colors.white38, fontSize: s(9.5)))),
     ]);
   }
 }
@@ -1327,12 +1327,6 @@ class _SurfPainter extends CustomPainter {
   final String title;
   _SurfPainter(this.bt, this.lo, this.hi, this.zlo, this.zhi, this.yaw, this.pitch, this.zoom, this.pan, this.liveC, this.xa, this.ya, this.ui, this.sel, this.cache, this.title, this.dragK);
 
-  static Color tpColor(double t) {
-    t = t.clamp(0.0, 1.0);
-    const a = Color(0xFF0A1EFF), m = Color(0xFF00E8F0), b = Color(0xFF1EF01E);
-    return t < 0.5 ? Color.lerp(a, m, t * 2)! : Color.lerp(m, b, (t - 0.5) * 2)!;
-  }
-
   void _txt(Canvas cv, String s, Offset at, Color col, double size, {double ax = 0.5, double ay = 0.5, bool bold = false}) {
     final tp = TextPainter(
         text: TextSpan(text: s, style: TextStyle(color: col, fontSize: size * ui, fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontFamily: kPaintFont, fontFamilyFallback: kPaintFallback)),
@@ -1343,10 +1337,10 @@ class _SurfPainter extends CustomPainter {
 
   @override
   void paint(Canvas cv, Size s) {
-    cv.drawRect(Offset.zero & s, Paint()..color = const Color(0xFFFAFAFA));
+    cv.drawRect(Offset.zero & s, Paint()..color = Colors.black);
     final R = bt.rows, C = bt.cols;
-    _txt(cv, title, Offset(s.width / 2, 16 * ui), Colors.black87, 15, ay: 0, bold: true);
-    _txt(cv, 'TIWSHOP · สูงสุด ${bt.fmt(hi)}  ต่ำสุด ${bt.fmt(lo)}  ซูม ${(zoom * 100).round()}%', Offset(s.width / 2, 36 * ui), Colors.black45, 9.5, ay: 0);
+    _txt(cv, title, Offset(s.width / 2, 16 * ui), Colors.white, 15, ay: 0, bold: true);
+    _txt(cv, 'TIWSHOP · สูงสุด ${bt.fmt(hi)}  ต่ำสุด ${bt.fmt(lo)}  ซูม ${(zoom * 100).round()}%', Offset(s.width / 2, 36 * ui), Colors.white54, 9.5, ay: 0);
     if (R < 2 || C < 2) return;
     final top = 50.0 * ui, bot = 26.0 * ui;
     final cx = s.width / 2 - 20 * ui + pan.dx, cy = top + (s.height - top - bot) / 2 + pan.dy;
@@ -1374,8 +1368,8 @@ class _SurfPainter extends CustomPainter {
     final pts = List.generate(R, (r) => List.generate(C, (c) => prj(hx(r, c), dy(r, c), gz(r, c))));
     // ---------- กล่องแกน: พื้น + ผนังหลัง + ผนังข้าง พร้อมเส้นประระดับค่า ----------
     Offset P(double x, double y, double z) => prj(x, y, z).$1;
-    final box = Paint()..style = PaintingStyle.stroke..color = Colors.black54..strokeWidth = 1;
-    final dash = Paint()..style = PaintingStyle.stroke..color = Colors.black26..strokeWidth = 1;
+    final box = Paint()..style = PaintingStyle.stroke..color = Colors.white38..strokeWidth = 1;
+    final dash = Paint()..style = PaintingStyle.stroke..color = Colors.white24..strokeWidth = 1;
     void dashed(Offset a, Offset b) {
       final n = ((b - a).distance / 6).floor();
       for (int i = 0; i < n; i += 2) { cv.drawLine(Offset.lerp(a, b, i / n)!, Offset.lerp(a, b, (i + 1) / n)!, dash); }
@@ -1391,7 +1385,7 @@ class _SurfPainter extends CustomPainter {
     cv.drawPath(Path()..addPolygon([P(0.5, -0.5, 0.5), P(0.5, 0.5, 0.5), P(0.5, 0.5, -0.5)], false), box);
     cv.drawPath(Path()..addPolygon([P(-0.5, -0.5, -0.5), P(-0.5, 0.5, -0.5), P(0.5, 0.5, -0.5), P(0.5, -0.5, -0.5)], true), box);
     // เส้นพื้นตามแกน
-    final floorL = Paint()..color = Colors.black12..strokeWidth = 1;
+    final floorL = Paint()..color = Colors.white12..strokeWidth = 1;
     for (int k = 0; k < 8; k++) {
       final f = -0.5 + k / 7;
       cv.drawLine(P(f, -0.5, -0.5), P(f, 0.5, -0.5), floorL);
@@ -1401,8 +1395,8 @@ class _SurfPainter extends CustomPainter {
     for (int k = 0; k <= nt; k++) {
       final z = -0.5 + k / nt, v = zlo + zr * k / nt;
       final str = v.abs() >= 100 ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
-      if (k > 0) _txt(cv, str, P(-0.5, -0.5, z) - Offset(6 * ui, 0), const Color(0xFF1A3CFF), 9, ax: 1);
-      if (k > 0) _txt(cv, str, P(0.5, 0.5, z) + Offset(6 * ui, 0), const Color(0xFF1A3CFF), 9, ax: 0);
+      if (k > 0) _txt(cv, str, P(-0.5, -0.5, z) - Offset(6 * ui, 0), _kCyan, 9, ax: 1);
+      if (k > 0) _txt(cv, str, P(0.5, 0.5, z) + Offset(6 * ui, 0), _kCyan, 9, ax: 0);
     }
     // ---------- พื้นผิว: วาดจากไกลไปใกล้ ----------
     final quads = <(double, int, int)>[];
@@ -1413,13 +1407,13 @@ class _SurfPainter extends CustomPainter {
     }
     quads.sort((a, b) => a.$1.compareTo(b.$1));
     final fill = Paint()..style = PaintingStyle.fill;
-    final edge = Paint()..style = PaintingStyle.stroke..color = Colors.black87..strokeWidth = 0.7;
+    final edge = Paint()..style = PaintingStyle.stroke..color = Colors.black38..strokeWidth = 0.5;
     final span = (hi - lo).abs() < 1e-9 ? 1.0 : (hi - lo);
     for (final q in quads) {
       final r = q.$2, c = q.$3;
       final p0 = pts[r][c].$1, p1 = pts[r][c + 1].$1, p2 = pts[r + 1][c + 1].$1, p3 = pts[r + 1][c].$1;
       final vavg = (bt.disp(r, c) + bt.disp(r, c + 1) + bt.disp(r + 1, c + 1) + bt.disp(r + 1, c)) / 4;
-      fill.color = tpColor((vavg - lo) / span);
+      fill.color = _heat(vavg, lo, hi);
       final path = Path()..moveTo(p0.dx, p0.dy)..lineTo(p1.dx, p1.dy)..lineTo(p2.dx, p2.dy)..lineTo(p3.dx, p3.dy)..close();
       cv.drawPath(path, fill);
       cv.drawPath(path, edge);
@@ -1431,10 +1425,10 @@ class _SurfPainter extends CustomPainter {
     double dpos(int i) => rpmRows ? -cf(i) : -rf(i);
     final sh = math.max(1, (nh / 8).ceil()), sd = math.max(1, (nd / 7).ceil());
     for (int i = 0; i < nh; i += sh) {
-      if (i < hAxis.text.length) _txt(cv, hAxis.text[i], P(hpos(i), 0.5, -0.5) + Offset(0, 9 * ui), const Color(0xFFE02020), 9);
+      if (i < hAxis.text.length) _txt(cv, hAxis.text[i], P(hpos(i), 0.5, -0.5) + Offset(0, 9 * ui), _kYel, 9);
     }
     for (int i = 0; i < nd; i += sd) {
-      if (i < dAxis.text.length) _txt(cv, dAxis.text[i], P(-0.5, dpos(i), -0.5) - Offset(5 * ui, 0), Colors.black87, 9, ax: 1);
+      if (i < dAxis.text.length) _txt(cv, dAxis.text[i], P(-0.5, dpos(i), -0.5) - Offset(5 * ui, 0), _kCyan, 9, ax: 1);
     }
     // ---------- จุดที่เลือก (จุดน้ำเงิน) · จุดที่เครื่องอยู่ (วงชมพู) ----------
     final flat = <Offset>[], unit = <double>[];
@@ -1446,22 +1440,22 @@ class _SurfPainter extends CustomPainter {
     }
     cache.pts = flat;
     cache.unit = unit;
-    final dot = Paint()..color = const Color(0xFF1030D0);
-    final ring = Paint()..style = PaintingStyle.stroke..color = Colors.white..strokeWidth = 1.5;
+    final dot = Paint()..color = Colors.white;
+    final ring = Paint()..style = PaintingStyle.stroke..color = _kMag..strokeWidth = 2;
     for (final k in sel) {
       if (k >= flat.length) continue;
       cv.drawCircle(flat[k], 4.5 * ui, dot);
       cv.drawCircle(flat[k], 4.5 * ui, ring);
     }
     if (liveC != null && liveC! < flat.length) {
-      cv.drawCircle(flat[liveC!], 7 * ui, Paint()..style = PaintingStyle.stroke..color = const Color(0xFFE040FB)..strokeWidth = 2.5);
+      cv.drawCircle(flat[liveC!], 7 * ui, Paint()..style = PaintingStyle.stroke..color = Colors.white..strokeWidth = 2.5);
     }
     if (dragK != null && dragK! < flat.length) {
       final v = bt.disp(dragK! ~/ C, dragK! % C);
       final at = flat[dragK!] - Offset(0, 22 * ui);
       final tp = TextPainter(text: TextSpan(text: ' ${bt.fmt(v)} ', style: TextStyle(color: Colors.white, fontSize: 12 * ui, fontWeight: FontWeight.bold, fontFamily: kPaintFont, fontFamilyFallback: kPaintFallback)), textDirection: TextDirection.ltr)..layout();
       final rect = Rect.fromCenter(center: at, width: tp.width + 8, height: tp.height + 4);
-      cv.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(5)), Paint()..color = const Color(0xFF1030D0));
+      cv.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(5)), Paint()..color = _kMag);
       tp.paint(cv, rect.topLeft + const Offset(4, 2));
     }
   }
