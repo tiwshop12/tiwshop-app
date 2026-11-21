@@ -4,7 +4,7 @@ import 'dart:io' as io;
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -18,6 +18,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'web_glue_stub.dart' if (dart.library.js_interop) 'web_glue.dart';
+
 part 'flash_page.dart';
 
 // ---------- BLE UUIDs (ต้องตรงกับ BleGauge.h) ----------
@@ -26,6 +28,9 @@ final Guid kData = Guid('7a0f0002-5a41-5201-9c11-2a52a1c0de01');
 final Guid kCmd = Guid('7a0f0003-5a41-5201-9c11-2a52a1c0de01');
 final Guid kImg = Guid('7a0f0004-5a41-5201-9c11-2a52a1c0de01');
 final Guid kFile = Guid('7a0f0005-5a41-5201-9c11-2a52a1c0de01'); // ส่งไฟล์ .bin ไปเขียนกล่อง ECU
+// เว็บไซต์ (Web Bluetooth) ใช้ UUID เป็นตัวพิมพ์เล็ก
+const kSvcS = '7a0f0001-5a41-5201-9c11-2a52a1c0de01', kDataS = '7a0f0002-5a41-5201-9c11-2a52a1c0de01', kCmdS = '7a0f0003-5a41-5201-9c11-2a52a1c0de01',
+    kImgS = '7a0f0004-5a41-5201-9c11-2a52a1c0de01', kFileS = '7a0f0005-5a41-5201-9c11-2a52a1c0de01';
 
 const kFont = 'Ethnocentric';
 // ถ่ายรูปหน้าจอแอพอัตโนมัติ (test/shots_test.dart): ไม่เรียก GPS / ล็อกจอ
@@ -335,6 +340,29 @@ class Telemetry {
 enum LinkState { idle, scanning, connecting, connected }
 
 // ---------- ตัวจัดการ BLE + GPS + Demo ----------
+/// ไฟล์ในคลังของแอพ (แอพ = ไฟล์ในเครื่อง, เว็บ = เก็บในเบราว์เซอร์)
+class LFile {
+  final String path;
+  final int size;
+  final DateTime modified;
+  final io.File? file;
+  final Uint8List? mem;
+  LFile.io(io.File f)
+      : file = f,
+        mem = null,
+        path = f.path,
+        size = f.lengthSync(),
+        modified = f.lastModifiedSync();
+  LFile.mem(this.path, Uint8List b, this.modified)
+      : file = null,
+        mem = b,
+        size = b.length;
+  String get name => path.split('/').last;
+  int lengthSync() => size;
+  DateTime lastModifiedSync() => modified;
+  Future<Uint8List> readAsBytes() async => mem ?? await file!.readAsBytes();
+}
+
 class GaugeController extends ChangeNotifier {
   static GaugeController? last; // ตัวล่าสุดที่สร้าง (ใช้ตอนถ่ายรูปหน้าจอ)
   GaugeController() { last = this; }
@@ -382,6 +410,16 @@ class GaugeController extends ChangeNotifier {
   BluetoothCharacteristic? _cmd, _imgCh, _fileCh;
   bool _fileBusy = false;
   StreamSubscription? _scanSub, _dataSub, _connSub, _gpsSub, _gnssSub;
+  WebGatt? _web; // เว็บไซต์: เชื่อมเกจผ่าน Web Bluetooth
+  bool get _linked => _web != null || _dev != null;
+  bool _has(String ch) => _web != null ? _web!.has(ch) : (ch == kCmdS ? _cmd != null : ch == kImgS ? _imgCh != null : ch == kFileS ? _fileCh != null : false);
+  int get _chunk => _web != null ? 180 : (_dev!.mtuNow - 4).clamp(16, 200).toInt();
+  Future<void> _w(String ch, List<int> b, {bool resp = true}) async {
+    if (_web != null) return _web!.write(ch, b, resp: resp);
+    final c = ch == kCmdS ? _cmd : ch == kImgS ? _imgCh : _fileCh;
+    if (c == null) throw StateError('no characteristic');
+    await c.write(b, withoutResponse: !resp && c.properties.writeWithoutResponse);
+  }
   static const EventChannel _gnss = EventChannel('mfb/gnss'); // จำนวนดาวเทียมจริงจาก Android (MainActivity.kt ที่ workflow เติมให้)
   Timer? _demoTimer, _retryTimer, _gpsWatch;
   bool _auto = false;
@@ -795,15 +833,14 @@ class GaugeController extends ChangeNotifier {
 
   /// ส่งความเร็ว GPS ไปบอร์ด TEST1: [3][u16 km/h x10] (ไม่รอตอบกลับ เพื่อให้เร็ว)
   void _sendGps() {
-    final c = _cmd;
     final sp = gpsSpeed;
-    if (demo || link != LinkState.connected || c == null || _logoBusy || sp == null) return;
+    if (demo || link != LinkState.connected || !_has(kCmdS) || _logoBusy || _fileBusy || sp == null) return;
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - _gpsSentMs < 120) return;
     _gpsSentMs = now;
     final v = (sp * 10).round().clamp(0, 65534).toInt();
     try {
-      c.write([3, v & 255, (v >> 8) & 255], withoutResponse: c.properties.writeWithoutResponse).catchError((_) {});
+      _w(kCmdS, [3, v & 255, (v >> 8) & 255], resp: false).catchError((_) {});
     } catch (_) {}
   }
 
@@ -902,6 +939,58 @@ class GaugeController extends ChangeNotifier {
     try {
       await FlutterBluePlus.stopScan();
     } catch (_) {}
+  }
+
+  /// เว็บไซต์: เลือกเกจจากหน้าต่างของเบราว์เซอร์ แล้วเชื่อมผ่าน Web Bluetooth
+  Future<void> connectWeb() async {
+    if (demo) toggleDemo();
+    error = null;
+    if (!WebGatt.supported) {
+      error = webIsIOS ? 'Safari บน iPhone ยังไม่รองรับบลูทูธ: เปิดเว็บนี้ในแอพ Bluefy' : 'เบราว์เซอร์นี้ไม่รองรับบลูทูธ: ใช้ Chrome';
+      notifyListeners();
+      return;
+    }
+    link = LinkState.scanning;
+    notifyListeners();
+    try {
+      final g = await WebGatt.request(kSvcS);
+      if (g == null) {
+        link = LinkState.idle;
+        notifyListeners();
+        return;
+      }
+      link = LinkState.connecting;
+      notifyListeners();
+      await g.connect(kSvcS, [kDataS, kCmdS, kImgS, kFileS]);
+      _web = g;
+      gaugeName = g.name;
+      await _dataSub?.cancel();
+      _dataSub = (await g.notify(kDataS)).listen((v) {
+        if (demo) return;
+        final p = Telemetry.parse(v);
+        if (p != null) {
+          t = p;
+          _dtcTrack();
+          _track();
+          notifyListeners();
+        }
+      });
+      await _connSub?.cancel();
+      _connSub = g.onDisconnected.listen((_) {
+        _web = null;
+        link = LinkState.idle;
+        t = Telemetry();
+        notifyListeners();
+      });
+      link = LinkState.connected;
+      notifyListeners();
+      if (_dtcWanted) dtcRead();
+    } catch (e) {
+      _web = null;
+      error = 'เชื่อมต่อไม่สำเร็จ';
+      link = LinkState.idle;
+      notifyListeners();
+    }
   }
 
   /// ต่อกับเกจที่ผู้ใช้เลือก แล้วจำไว้
@@ -1019,6 +1108,8 @@ class GaugeController extends ChangeNotifier {
     try {
       await _dev?.disconnect();
     } catch (_) {}
+    _web?.disconnect();
+    _web = null;
     link = LinkState.idle;
     t = Telemetry();
     notifyListeners();
@@ -1071,21 +1162,20 @@ class GaugeController extends ChangeNotifier {
 
   Future<void> sendCmd(List<int> bytes) async {
     try {
-      await _cmd?.write(bytes, withoutResponse: false);
+      if (_has(kCmdS)) await _w(kCmdS, bytes);
     } catch (_) {}
   }
 
   /// ส่งโลโก้ 320x240 RGB565 (153600 ไบต์) ไปเก็บในบอร์ด คืนค่า null = สำเร็จ, ข้อความ = error
   Future<String?> sendLogo(Uint8List data, void Function(double) onProgress) async {
-    final ch = _imgCh;
-    if (ch == null || link != LinkState.connected || _dev == null) {
+    if (!_has(kImgS) || link != LinkState.connected || !_linked) {
       return 'ยังไม่ได้เชื่อมต่อบอร์ด หรือเฟิร์มแวร์ยังไม่รองรับการส่งโลโก้';
     }
     _logoBusy = true;
     try {
-      final chunk = (_dev!.mtuNow - 4).clamp(16, 200).toInt();
+      final chunk = _chunk;
       final n = data.length;
-      await ch.write([1, n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255]);
+      await _w(kImgS, [1, n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255]);
       int sum = 0;
       for (int off = 0; off < n; off += chunk) {
         final end = math.min(n, off + chunk);
@@ -1093,10 +1183,10 @@ class GaugeController extends ChangeNotifier {
         for (final b in part) {
           sum = (sum + b) & 0xFFFF;
         }
-        await ch.write([2, ...part]);
+        await _w(kImgS, [2, ...part]);
         onProgress(end / n);
       }
-      await ch.write([3, sum & 255, (sum >> 8) & 255]);
+      await _w(kImgS, [3, sum & 255, (sum >> 8) & 255]);
       for (int i = 0; i < 40; i++) {
         await Future.delayed(const Duration(milliseconds: 100));
         if (t.img == 2) return null;
@@ -1111,10 +1201,9 @@ class GaugeController extends ChangeNotifier {
   }
 
   Future<String?> resetLogo() async {
-    final ch = _imgCh;
-    if (ch == null || link != LinkState.connected) return 'ยังไม่ได้เชื่อมต่อบอร์ด';
+    if (!_has(kImgS) || link != LinkState.connected) return 'ยังไม่ได้เชื่อมต่อบอร์ด';
     try {
-      await ch.write([4]);
+      await _w(kImgS, [4]);
       return null;
     } catch (e) {
       return 'ส่งคำสั่งไม่สำเร็จ: $e';
@@ -1128,17 +1217,16 @@ class GaugeController extends ChangeNotifier {
 
   /// ส่งไฟล์ .bin ไปเก็บในเกจ (ช่อง FILE) — name ส่งไปด้วยเพื่อให้เกจแสดงชื่อไฟล์
   Future<String?> sendBinFile(Uint8List data, String name, void Function(double) onProgress) async {
-    final ch = _fileCh;
-    if (ch == null || link != LinkState.connected || _dev == null) {
+    if (!_has(kFileS) || link != LinkState.connected || !_linked) {
       return 'เฟิร์มแวร์เกจยังไม่รองรับการเขียนไฟล์ (ต้อง FW 1.3.0 ขึ้นไป)';
     }
     if (_fileBusy) return 'กำลังส่งไฟล์อยู่';
     _fileBusy = true;
     try {
-      final chunk = (_dev!.mtuNow - 4).clamp(16, 200).toInt();
+      final chunk = _chunk;
       final n = data.length;
       final nb = name.codeUnits.take(24).toList();
-      await ch.write([1, n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255, ...nb]);
+      await _w(kFileS, [1, n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255, ...nb]);
       int sum = 0;
       for (int off = 0; off < n; off += chunk) {
         final end = math.min(n, off + chunk);
@@ -1146,10 +1234,10 @@ class GaugeController extends ChangeNotifier {
         for (final b in part) {
           sum = (sum + b) & 0xFFFF;
         }
-        await ch.write([2, ...part], withoutResponse: false);
+        await _w(kFileS, [2, ...part]);
         onProgress(end / n);
       }
-      await ch.write([3, sum & 255, (sum >> 8) & 255]);
+      await _w(kFileS, [3, sum & 255, (sum >> 8) & 255]);
       for (int i = 0; i < 60; i++) {
         await Future.delayed(const Duration(milliseconds: 100));
         if (t.fileRx == 2) return null;
@@ -1164,10 +1252,9 @@ class GaugeController extends ChangeNotifier {
   }
 
   Future<String?> deleteGaugeBin() async {
-    final ch = _fileCh;
-    if (ch == null || link != LinkState.connected) return 'ยังไม่ได้เชื่อมต่อเกจ';
+    if (!_has(kFileS) || link != LinkState.connected) return 'ยังไม่ได้เชื่อมต่อเกจ';
     try {
-      await ch.write([4]);
+      await _w(kFileS, [4]);
       return null;
     } catch (e) {
       return 'ส่งคำสั่งไม่สำเร็จ: $e';
@@ -1176,10 +1263,9 @@ class GaugeController extends ChangeNotifier {
 
   /// สั่งเกจเริ่มเขียนไฟล์ลงกล่อง (vendor 0 อัตโนมัติ, 1 Keihin, 2 Shindengen)
   Future<String?> startFlash(int vendor) async {
-    final ch = _fileCh;
-    if (ch == null || link != LinkState.connected) return 'ยังไม่ได้เชื่อมต่อเกจ';
+    if (!_has(kFileS) || link != LinkState.connected) return 'ยังไม่ได้เชื่อมต่อเกจ';
     try {
-      await ch.write([5, vendor & 0xFF]);
+      await _w(kFileS, [5, vendor & 0xFF]);
       return null;
     } catch (e) {
       return 'ส่งคำสั่งไม่สำเร็จ: $e';
@@ -1187,6 +1273,40 @@ class GaugeController extends ChangeNotifier {
   }
 
   // ----- คลังไฟล์ในเครื่อง (เก็บ .bin ไว้ส่งซ้ำได้) -----
+  // แอพ: เก็บเป็นไฟล์ในเครื่อง · เว็บไซต์: เก็บในเบราว์เซอร์ (localStorage ถ้าพื้นที่พอ ไม่พอก็เก็บไว้จนปิดหน้าเว็บ)
+  static final Map<String, LFile> _webFiles = {};
+  static bool _webLoaded = false;
+
+  Future<void> _webLoad() async {
+    if (_webLoaded) return;
+    _webLoaded = true;
+    try {
+      final p = await SharedPreferences.getInstance();
+      for (final k in p.getKeys().where((k) => k.startsWith('wf:'))) {
+        final v = p.getString(k);
+        if (v == null) continue;
+        final i = v.indexOf('|');
+        _webFiles[k.substring(3)] = LFile.mem(k.substring(3), base64Decode(v.substring(i + 1)), DateTime.fromMillisecondsSinceEpoch(int.tryParse(v.substring(0, i)) ?? 0));
+      }
+    } catch (_) {}
+  }
+
+  Future<LFile> _webPut(String path, Uint8List bytes) async {
+    await _webLoad();
+    final f = LFile.mem(path, bytes, DateTime.now());
+    _webFiles[path] = f;
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('wf:$path', '${f.modified.millisecondsSinceEpoch}|${base64Encode(bytes)}');
+    } catch (_) {}
+    return f;
+  }
+
+  Future<List<LFile>> _webList(String dir, String ext) async {
+    await _webLoad();
+    return _webFiles.values.where((f) => f.path.startsWith('$dir/') && f.path.toLowerCase().endsWith(ext)).toList();
+  }
+
   Future<io.Directory> _binsDir() async {
     final base = await getApplicationDocumentsDirectory();
     final d = io.Directory('${base.path}/bins');
@@ -1194,24 +1314,26 @@ class GaugeController extends ChangeNotifier {
     return d;
   }
 
-  Future<List<io.File>> listBins() async {
+  Future<List<LFile>> listBins() async {
     try {
-      final d = await _binsDir();
-      final l = (await d.list().toList()).whereType<io.File>().where((f) => f.path.toLowerCase().endsWith('.bin')).toList();
-      l.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
+      final l = kIsWeb
+          ? await _webList('bins', '.bin')
+          : [for (final f in (await (await _binsDir()).list().toList()).whereType<io.File>().where((f) => f.path.toLowerCase().endsWith('.bin'))) LFile.io(f)];
+      l.sort((a, b) => b.modified.compareTo(a.modified));
       return l;
     } catch (_) {
       return [];
     }
   }
 
-  Future<io.File> importBinBytes(String name, Uint8List bytes) async {
-    final d = await _binsDir();
+  Future<LFile> importBinBytes(String name, Uint8List bytes) async {
     var safe = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     if (!safe.toLowerCase().endsWith('.bin')) safe = '$safe.bin';
+    if (kIsWeb) return _webPut('bins/$safe', bytes);
+    final d = await _binsDir();
     final f = io.File('${d.path}/$safe');
     await f.writeAsBytes(bytes, flush: true);
-    return f;
+    return LFile.io(f);
   }
 
   // ----- คลัง XDF (เก็บไว้ในแอพ ไม่ต้องหาไฟล์ในเครื่องทุกครั้ง) -----
@@ -1222,10 +1344,11 @@ class GaugeController extends ChangeNotifier {
     return d;
   }
 
-  Future<List<io.File>> listXdfs() async {
+  Future<List<LFile>> listXdfs() async {
     try {
-      final d = await _xdfDir();
-      final l = (await d.list().toList()).whereType<io.File>().where((f) => f.path.toLowerCase().endsWith('.xdf')).toList();
+      final l = kIsWeb
+          ? await _webList('xdf', '.xdf')
+          : [for (final f in (await (await _xdfDir()).list().toList()).whereType<io.File>().where((f) => f.path.toLowerCase().endsWith('.xdf'))) LFile.io(f)];
       l.sort((a, b) => a.path.compareTo(b.path));
       return l;
     } catch (_) {
@@ -1233,18 +1356,26 @@ class GaugeController extends ChangeNotifier {
     }
   }
 
-  Future<io.File> importXdfBytes(String name, Uint8List bytes) async {
-    final d = await _xdfDir();
+  Future<LFile> importXdfBytes(String name, Uint8List bytes) async {
     var safe = name.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     if (!safe.toLowerCase().endsWith('.xdf')) safe = '$safe.xdf';
+    if (kIsWeb) return _webPut('xdf/$safe', bytes);
+    final d = await _xdfDir();
     final f = io.File('${d.path}/$safe');
     await f.writeAsBytes(bytes, flush: true);
-    return f;
+    return LFile.io(f);
   }
 
-  Future<void> deleteBinFile(io.File f) async {
+  Future<void> deleteBinFile(LFile f) async {
     try {
-      if (await f.exists()) await f.delete();
+      if (kIsWeb) {
+        _webFiles.remove(f.path);
+        final p = await SharedPreferences.getInstance();
+        await p.remove('wf:${f.path}');
+        return;
+      }
+      final x = f.file;
+      if (x != null && await x.exists()) await x.delete();
     } catch (_) {}
   }
 
@@ -1433,7 +1564,47 @@ class MfbProApp extends StatelessWidget {
         title: 'TIWSHOP',
         theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: Colors.black),
         home: const SplashPage(),
+        builder: kIsWeb ? (ctx, child) => _WebRotate(child: child ?? const SizedBox()) : null,
       );
+}
+
+// เว็บไซต์บนมือถือแนวตั้ง: แนะนำให้หมุนเป็นแนวนอน (หน้าเกจออกแบบให้ดูแนวนอน)
+class _WebRotate extends StatefulWidget {
+  final Widget child;
+  const _WebRotate({required this.child});
+  @override
+  State<_WebRotate> createState() => _WebRotateState();
+}
+
+class _WebRotateState extends State<_WebRotate> {
+  bool skip = false;
+  @override
+  Widget build(BuildContext context) {
+    final sz = MediaQuery.of(context).size;
+    if (skip || sz.height <= sz.width || sz.width > 700) return widget.child;
+    return Stack(children: [
+      widget.child,
+      Positioned.fill(
+        child: Material(
+          color: Colors.black.withOpacity(0.92),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.screen_rotation, color: kGreen, size: 64),
+                const SizedBox(height: 16),
+                const Text('หมุนโทรศัพท์เป็นแนวนอน', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                const Text('หน้าเกจและหน้าจูนออกแบบให้ใช้แนวนอน\n(ปิดล็อกการหมุนจอก่อน)', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontSize: 14)),
+                const SizedBox(height: 18),
+                TextButton(onPressed: () => setState(() => skip = true), child: const Text('ใช้แนวตั้งต่อ', style: TextStyle(color: kGreen))),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    ]);
+  }
 }
 
 // ---------- หน้าเปิดแอพ: โลโก้ TIWSHOP เลือนเข้า-ออก 2.2 วิ + แถบโหลด ----------
@@ -3420,6 +3591,13 @@ class _TP {
 
 // ---------- หน้าต่างเลือกเกจ (กด "เชื่อมต่อ") : เกจแต่ละตัวชื่อไม่ซ้ำ TIWSHOP-XXXX (เกจรุ่นเก่า FTP-GAUGE-XXXX ก็ต่อได้: ค้นหาด้วย UUID) ----------
 Future<void> pickGauge(BuildContext context, GaugeController c) async {
+  if (kIsWeb) {
+    await c.connectWeb();
+    if (c.error != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(c.error!)));
+    }
+    return;
+  }
   if (!await c.prepareBle()) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('เปิดบลูทูธก่อน แล้วกดเชื่อมต่ออีกครั้ง')));
@@ -3650,14 +3828,28 @@ class AfrLog extends ChangeNotifier {
   }
 
   Future<io.File> _file() async => io.File('${(await getApplicationDocumentsDirectory()).path}/afr_log.json');
+  Future<void> _put(String js) async {
+    if (kIsWeb) {
+      final p = await SharedPreferences.getInstance();
+      await p.setString('afr_log', js);
+    } else {
+      await (await _file()).writeAsString(js);
+    }
+  }
+
+  Future<String?> _get() async {
+    if (kIsWeb) return (await SharedPreferences.getInstance()).getString('afr_log');
+    final f = await _file();
+    if (!await f.exists()) return null;
+    return f.readAsString();
+  }
 
   Future<void> _save() async {
     _saveMs = DateTime.now().millisecondsSinceEpoch;
     if (!_dirty || !ready) return;
     _dirty = false;
     try {
-      final f = await _file();
-      await f.writeAsString(jsonEncode({'rpm': rpm, 'tps': tps, 'sum': sum, 'cnt': cnt}));
+      await _put(jsonEncode({'rpm': rpm, 'tps': tps, 'sum': sum, 'cnt': cnt}));
     } catch (_) {}
   }
 
@@ -3666,9 +3858,9 @@ class AfrLog extends ChangeNotifier {
     if (_loaded) return;
     _loaded = true;
     try {
-      final f = await _file();
-      if (!await f.exists()) return;
-      final j = jsonDecode(await f.readAsString());
+      final js = await _get();
+      if (js == null) return;
+      final j = jsonDecode(js);
       final r = [for (final v in j['rpm'] as List) (v as num).toDouble()];
       final c = [for (final v in j['tps'] as List) (v as num).toDouble()];
       if (r.length != rows || c.length != cols) return;

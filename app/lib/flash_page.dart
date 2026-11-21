@@ -20,7 +20,7 @@ class FlashPage extends StatefulWidget {
 }
 
 class _FlashPageState extends State<FlashPage> {
-  List<io.File> files = [], xdfs = [];
+  List<LFile> files = [], xdfs = [];
   List<Map<String, dynamic>> lib = [];
   bool loading = true, sending = false;
   double? sendProg;
@@ -157,7 +157,7 @@ class _FlashPageState extends State<FlashPage> {
   // ---------------- ไฟล์ของฉัน ----------------
   Future<Uint8List?> _bytesOf(PlatformFile f) async {
     if (f.bytes != null) return f.bytes;
-    if (f.path != null) {
+    if (!kIsWeb && f.path != null) {
       final ff = io.File(f.path!);
       if (await ff.exists()) return ff.readAsBytes();
     }
@@ -197,7 +197,7 @@ class _FlashPageState extends State<FlashPage> {
     }
   }
 
-  Future<void> _delete(io.File f) async {
+  Future<void> _delete(LFile f) async {
     final name = f.path.split('/').last;
     final ok = await showDialog<bool>(
       context: context,
@@ -217,7 +217,7 @@ class _FlashPageState extends State<FlashPage> {
     await _load();
   }
 
-  void _fileSelect(io.File f) {
+  void _fileSelect(LFile f) {
     final name = f.path.split('/').last;
     setState(() {
       sel = _FlashSel(name, 'ไฟล์ของฉัน', f.lengthSync(), () => f.readAsBytes(), 'file:${f.path}');
@@ -232,7 +232,7 @@ class _FlashPageState extends State<FlashPage> {
   }
 
   // จูน BIN ของฉัน: เลือก XDF จากไฟล์ของฉัน / คลังจูน / เครื่อง
-  Future<void> _tuneFile(io.File f) async {
+  Future<void> _tuneFile(LFile f) async {
     try {
       final binName = f.path.split('/').last;
       final mine = [...xdfs]..sort((a, b) => _match(binName, b.path.split('/').last).compareTo(_match(binName, a.path.split('/').last)));
@@ -278,7 +278,7 @@ class _FlashPageState extends State<FlashPage> {
       );
       if (choice == null) return;
       Uint8List? xb;
-      if (choice is io.File) {
+      if (choice is LFile) {
         xb = await choice.readAsBytes();
       } else if (choice is Map<String, dynamic>) {
         xb = await _asset(choice['xdf'] as String);
@@ -311,7 +311,7 @@ class _FlashPageState extends State<FlashPage> {
       xdf: doc,
       getRpm: () => (c.demo || c.ecuLive) ? c.t.rpm : null,
       getTps: () => (c.demo || c.ecuLive) ? c.t.tps : null,
-      onSave: (name, bytes) async { await c.importBinBytes(name, bytes); },
+      onSave: (name, bytes) async { await c.importBinBytes(name, bytes); if (kIsWeb) webDownload(name, bytes); },
     )));
     await _load();
   }
@@ -938,7 +938,7 @@ class _FlashPageState extends State<FlashPage> {
     return [for (final f in l) _fileRow(th, f)];
   }
 
-  Widget _fileRow(AppTheme th, io.File f) {
+  Widget _fileRow(AppTheme th, LFile f) {
     final name = f.path.split('/').last;
     final selected = sel?.key == 'file:${f.path}';
     final tuned = name.toLowerCase().contains('_tuned');
@@ -968,6 +968,7 @@ class _FlashPageState extends State<FlashPage> {
               Text('${_kb(f.lengthSync())} · $when', style: const TextStyle(color: Colors.white38, fontSize: 10.5)),
             ])),
             _iconAct(Icons.tune, kAmber, () => _tuneFile(f), 'จูน'),
+            if (kIsWeb) _iconAct(Icons.download, Colors.white70, () async => webDownload(f.name, await f.readAsBytes()), 'ดาวน์โหลด'),
             _iconAct(Icons.delete_outline, kBad, sending ? null : () => _delete(f), 'ลบ'),
             _iconAct(selected ? Icons.radio_button_checked : Icons.radio_button_off, selected ? th.c : Colors.white38, () => _fileSelect(f), 'เลือกไว้เขียน'),
           ]),

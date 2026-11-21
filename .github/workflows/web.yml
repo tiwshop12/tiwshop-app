@@ -1,0 +1,63 @@
+name: Website (Flutter web -> GitHub Pages)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # push ไฟล์เว็บไปที่ branch gh-pages
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      # โครงเว็บ (index.html / manifest / ไอคอน) สร้างอัตโนมัติ ไม่ทับโค้ดเรา
+      - name: Generate web scaffold
+        run: |
+          cp pubspec.yaml /tmp/pubspec.yaml
+          cp lib/main.dart /tmp/main.dart
+          flutter create . --platforms=web --project-name gauge --org com.ftp
+          cp /tmp/pubspec.yaml pubspec.yaml
+          cp /tmp/main.dart lib/main.dart
+          rm -f test/widget_test.dart
+
+      - name: Brand the website (ชื่อ / ไอคอน / ภาษาไทย)
+        run: |
+          python3 - <<'PY'
+          import json, re
+          p = 'web/index.html'
+          s = open(p, encoding='utf-8').read()
+          s = s.replace('<html>', '<html lang="th">')
+          s = re.sub(r'<title>.*?</title>', '<title>TIWSHOP SMART GAUGE</title>', s, flags=re.S)
+          s = re.sub(r'<meta name="description" content="[^"]*">', '<meta name="description" content="TIWSHOP SMART GAUGE: ดูค่า จูน และเขียนกล่อง ECU ผ่านเว็บ">', s)
+          s = s.replace('content="gauge"', 'content="TIWSHOP"')
+          s = s.replace('</head>', '  <meta name="theme-color" content="#000000">\n  <style>body{background:#000}</style>\n</head>')
+          open(p, 'w', encoding='utf-8').write(s)
+          m = json.load(open('web/manifest.json', encoding='utf-8'))
+          m.update(name='TIWSHOP SMART GAUGE', short_name='TIWSHOP', description='ดูค่า จูน และเขียนกล่อง ECU ผ่านเว็บ',
+                   background_color='#000000', theme_color='#000000', orientation='landscape')
+          json.dump(m, open('web/manifest.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+          PY
+          for s in 192 512; do convert assets/icon.png -resize ${s}x${s} web/icons/Icon-$s.png; convert assets/icon.png -resize ${s}x${s} web/icons/Icon-maskable-$s.png; done
+          convert assets/icon.png -resize 32x32 web/favicon.png
+
+      - run: flutter pub get
+      - run: flutter build web --release --base-href /tiwshop-app/
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: app/build/web
+          publish_branch: gh-pages
+          force_orphan: true
