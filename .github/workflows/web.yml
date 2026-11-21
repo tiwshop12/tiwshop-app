@@ -48,8 +48,15 @@ jobs:
                    background_color='#000000', theme_color='#000000', orientation='landscape')
           json.dump(m, open('web/manifest.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
           PY
-          for s in 192 512; do convert assets/icon.png -resize ${s}x${s} web/icons/Icon-$s.png; convert assets/icon.png -resize ${s}x${s} web/icons/Icon-maskable-$s.png; done
-          convert assets/icon.png -resize 32x32 web/favicon.png
+          pip install -q pillow
+          python3 - <<'PY'
+          from PIL import Image
+          im = Image.open('assets/icon.png').convert('RGBA')
+          for s in (192, 512):
+              im.resize((s, s), Image.LANCZOS).save(f'web/icons/Icon-{s}.png')
+              im.resize((s, s), Image.LANCZOS).save(f'web/icons/Icon-maskable-{s}.png')
+          im.resize((32, 32), Image.LANCZOS).save('web/favicon.png')
+          PY
 
       - run: flutter pub get
       - run: flutter build web --release --base-href /tiwshop-app/
