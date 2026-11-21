@@ -1350,7 +1350,7 @@ class _SurfPainter extends CustomPainter {
     if (R < 2 || C < 2) return;
     final top = 50.0 * ui, bot = 26.0 * ui;
     final cx = s.width / 2 - 20 * ui + pan.dx, cy = top + (s.height - top - bot) / 2 + pan.dy;
-    final scale = math.min((s.width - 190 * ui) / 1.35, (s.height - top - bot) / 1.3) * zoom;
+    final scale = math.min((s.width - 190 * ui) / 0.9, (s.height - top - bot) / 0.82) * zoom;
     const zs = 0.85; // ความสูงกล่องเทียบกับความกว้าง
     final cyw = math.cos(yaw), syw = math.sin(yaw), ce = math.cos(pitch), se = math.sin(pitch);
     (Offset, double) prj(double x, double y, double z) {
