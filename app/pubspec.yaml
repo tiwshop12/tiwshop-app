@@ -1,7 +1,7 @@
 name: gauge   # ต้องตรงกับ --project-name ใน build-apk.yml (แพ็กเกจ Android = com.ftp.gauge)
 description: TIWSHOP smart gauge app (BLE client for the TIWSHOP SMART GAUGE ESP32 K-Line gauge)
 publish_to: none
-version: 1.7.2+33   # TIWSHOP 1.3.0 = คลังไฟล์ + เขียนไฟล์ ECU (แพ็กเกจ com.ftp.gauge เดิม ค่าเดิมไม่หาย) ; ออกรุ่นใหม่ให้เพิ่มเลขหลัง + ทุกครั้ง
+version: 1.7.3+34   # TIWSHOP 1.3.0 = คลังไฟล์ + เขียนไฟล์ ECU (แพ็กเกจ com.ftp.gauge เดิม ค่าเดิมไม่หาย) ; ออกรุ่นใหม่ให้เพิ่มเลขหลัง + ทุกครั้ง
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
