@@ -1282,15 +1282,18 @@ class _SurfPainter extends CustomPainter {
       final f = 1.0 / (1.6 - depth * 0.4);
       return (Offset(cx + rx * scale * f, cy + py * scale * f), depth);
     }
-    double gx(int c) => c / (C - 1) - 0.5;
-    double gy(int r) => r / (R - 1) - 0.5;
+    // แกน TPS/MAP ไว้ซ้าย แกนรอบเครื่องไว้ขวา (ถ้าแถวเป็นรอบเครื่อง -> สลับแกนในภาพ 3D)
+    final swap = ya.kind == AxKind.rpm && xa.kind != AxKind.rpm;
+    double rf(int r) => r / (R - 1) - 0.5;
+    double cf(int c) => c / (C - 1) - 0.5;
     double gz(int r, int c) => (bt.disp(r, c) - lo) / zr - 0.5;
-    final pts = List.generate(R, (r) => List.generate(C, (c) => prj(gx(c), gy(r), gz(r, c))));
+    (Offset, double) pq(double a, double b, double z) => swap ? prj(a, b, z) : prj(b, a, z); // a = ตำแหน่งแถว, b = ตำแหน่งคอลัมน์
+    final pts = List.generate(R, (r) => List.generate(C, (c) => pq(rf(r), cf(c), gz(r, c))));
     // พื้น + เส้นกริด
     final floor = Paint()..style = PaintingStyle.stroke..color = Colors.white12..strokeWidth = 1;
-    Offset fp(double x, double y) => prj(x, y, -0.5).$1;
-    for (int c = 0; c < C; c += math.max(1, (C / 8).ceil())) { cv.drawLine(fp(gx(c), -0.5), fp(gx(c), 0.5), floor); }
-    for (int r = 0; r < R; r += math.max(1, (R / 8).ceil())) { cv.drawLine(fp(-0.5, gy(r)), fp(0.5, gy(r)), floor); }
+    Offset fp(double a, double b) => pq(a, b, -0.5).$1;
+    for (int c = 0; c < C; c += math.max(1, (C / 8).ceil())) { cv.drawLine(fp(-0.5, cf(c)), fp(0.5, cf(c)), floor); }
+    for (int r = 0; r < R; r += math.max(1, (R / 8).ceil())) { cv.drawLine(fp(rf(r), -0.5), fp(rf(r), 0.5), floor); }
     cv.drawPath(Path()..addPolygon([fp(-0.5, -0.5), fp(0.5, -0.5), fp(0.5, 0.5), fp(-0.5, 0.5)], true), Paint()..style = PaintingStyle.stroke..color = Colors.white24..strokeWidth = 1.2);
     // สี่เหลี่ยมเรียงจากไกลไปใกล้
     final quads = <(double, int, int)>[];
@@ -1317,8 +1320,8 @@ class _SurfPainter extends CustomPainter {
       tp.paint(cv, at - Offset(tp.width / 2, tp.height / 2));
     }
     final sx = math.max(1, (C / 6).ceil()), sr = math.max(1, (R / 6).ceil());
-    for (int c = 0; c < C; c += sx) { if (c < xa.text.length) lab(xa.text[c], fp(gx(c), 0.62), _kCyan); }
-    for (int r = 0; r < R; r += sr) { if (r < ya.text.length) lab(ya.text[r], fp(-0.62, gy(r)), _kYel); }
+    for (int c = 0; c < C; c += sx) { if (c < xa.text.length) lab(xa.text[c], fp(swap ? -0.62 : 0.62, cf(c)), _kCyan); }
+    for (int r = 0; r < R; r += sr) { if (r < ya.text.length) lab(ya.text[r], fp(rf(r), swap ? 0.62 : -0.62), _kYel); }
     // ค่าสูงสุด / ต่ำสุด
     final tp = TextPainter(text: TextSpan(text: 'สูงสุด ${bt.fmt(hi)}   ต่ำสุด ${bt.fmt(lo)}   ซูม ${(zoom * 100).round()}%', style: TextStyle(color: Colors.white54, fontSize: 10 * ui, fontFamily: kPaintFont, fontFamilyFallback: kPaintFallback)), textDirection: TextDirection.ltr)..layout();
     tp.paint(cv, Offset(8 * ui, 8 * ui));
