@@ -16,3 +16,6 @@ class WebGatt {
 void webDownload(String name, Uint8List bytes) {}
 bool get webIsIOS => false;
 bool get webPortrait => false;
+
+void webFullscreenToggle() {}
+bool get webFullscreen => false;

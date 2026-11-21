@@ -1832,6 +1832,13 @@ class _GaugePageState extends State<GaugePage> {
                 _iconBtn(Icons.settings, th, () {
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => SettingsPage(c: c)));
                 }),
+                if (kIsWeb) ...[
+                  const SizedBox(width: 6),
+                  _iconBtn(webFullscreen ? Icons.fullscreen_exit : Icons.fullscreen, th, () {
+                    webFullscreenToggle();
+                    Future.delayed(const Duration(milliseconds: 400), () { if (mounted) setState(() {}); });
+                  }),
+                ],
               ]),
               const SizedBox(height: 6),
               Expanded(

@@ -124,3 +124,19 @@ bool get webPortrait {
   final h = globalContext.getProperty<JSNumber?>('innerHeight'.toJS)?.toDartDouble ?? 0;
   return h > w;
 }
+
+/// เต็มจอ (เหมือนดูหนัง) + ล็อกจอแนวนอน — ฟังก์ชัน JS อยู่ใน web/index.html
+void webFullscreenToggle() {
+  try {
+    globalContext.callMethod<JSAny?>('tiwFullscreenToggle'.toJS);
+  } catch (_) {}
+}
+
+bool get webFullscreen {
+  try {
+    final d = globalContext.getProperty<JSObject>('document'.toJS);
+    return d.getProperty<JSAny?>('fullscreenElement'.toJS) != null || d.getProperty<JSAny?>('webkitFullscreenElement'.toJS) != null;
+  } catch (_) {
+    return false;
+  }
+}

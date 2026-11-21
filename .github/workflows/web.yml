@@ -41,11 +41,37 @@ jobs:
           s = re.sub(r'<title>.*?</title>', '<title>TIWSHOP SMART GAUGE</title>', s, flags=re.S)
           s = re.sub(r'<meta name="description" content="[^"]*">', '<meta name="description" content="TIWSHOP SMART GAUGE: ดูค่า จูน และเขียนกล่อง ECU ผ่านเว็บ">', s)
           s = s.replace('content="gauge"', 'content="TIWSHOP"')
-          s = s.replace('</head>', '  <meta name="theme-color" content="#000000">\n  <style>body{background:#000}</style>\n</head>')
+          FS = '''
+            <meta name="theme-color" content="#000000">
+            <meta name="apple-mobile-web-app-capable" content="yes">
+            <meta name="mobile-web-app-capable" content="yes">
+            <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+            <style>html,body{background:#000;height:100%;margin:0;overflow:hidden;overscroll-behavior:none}</style>
+            <script>
+            // เต็มจอแบบดูหนัง: แตะจอครั้งแรกแล้วเต็มจอ + ล็อกแนวนอน (Android Chrome) ; ปุ่มเต็มจอในแอพใช้ tiwFullscreenToggle
+            (function () {
+              var off = false;
+              function isFs() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+              function standalone() { return window.matchMedia('(display-mode: fullscreen)').matches || window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone; }
+              function enter() {
+                var d = document.documentElement, r = d.requestFullscreen || d.webkitRequestFullscreen;
+                if (!r || isFs()) return;
+                try {
+                  var p = r.call(d, { navigationUI: 'hide' });
+                  if (p && p.then) p.then(function () { try { screen.orientation.lock('landscape').catch(function () {}); } catch (e) {} }).catch(function () {});
+                } catch (e) {}
+              }
+              function exit() { var x = document.exitFullscreen || document.webkitExitFullscreen; if (x && isFs()) x.call(document); }
+              window.tiwFullscreenToggle = function () { if (isFs()) { off = true; exit(); } else { off = false; enter(); } };
+              document.addEventListener('pointerup', function () { if (!off && !standalone()) enter(); }, { passive: true });
+            })();
+            </script>
+          '''
+          s = s.replace('</head>', FS + '</head>')
           open(p, 'w', encoding='utf-8').write(s)
           m = json.load(open('web/manifest.json', encoding='utf-8'))
           m.update(name='TIWSHOP SMART GAUGE', short_name='TIWSHOP', description='ดูค่า จูน และเขียนกล่อง ECU ผ่านเว็บ',
-                   background_color='#000000', theme_color='#000000', orientation='landscape')
+                   background_color='#000000', theme_color='#000000', orientation='landscape', display='fullscreen')
           json.dump(m, open('web/manifest.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
           PY
           pip install -q pillow
