@@ -1084,6 +1084,8 @@ class _TunePageState extends State<TunePage> {
     final isLive = liveC == k;
     return GestureDetector(
       onTap: () => setState(() { if (selected) sel.remove(k); else sel.add(k); }),
+      // TIWSHOP: ดับเบิลคลิก/แตะ 2 ที = แก้ค่าช่องนั้นทันที (ใช้ง่ายบนคอม)
+      onDoubleTap: () { if (!selected) setState(() { sel..clear(); sel.add(k); }); _setValue(); },
       child: Container(
         width: w, height: h, alignment: Alignment.center,
         decoration: BoxDecoration(
