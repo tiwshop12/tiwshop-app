@@ -705,11 +705,20 @@ class GaugeController extends ChangeNotifier {
 
   Future<void> _startGps() async {
     try {
-      final perm = await Geolocator.requestPermission();
-      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) return;
-      _startGnss();
+      // เว็บ (โดยเฉพาะ Safari/iOS + Bluefy): Permissions API ไม่รองรับ -> requestPermission อาจ throw หรือคืน denied
+      // ทั้งที่ใช้งานได้ ; ข้ามการเช็คสิทธิ์แบบ native แล้วให้เบราว์เซอร์ถามสิทธิ์เองตอนเริ่มอ่านตำแหน่ง
+      if (kIsWeb) {
+        try { await Geolocator.requestPermission(); } catch (_) {}
+      } else {
+        final perm = await Geolocator.requestPermission();
+        if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) return;
+        _startGnss();
+      }
       // Android: ใช้ GPS ตรง (LocationManager) และขอทุก 200 ms -> ได้ความเร็วเร็วที่สุดเท่าที่ชิป GPS ให้ (ปกติ ~1 Hz ขึ้นไป)
-      final LocationSettings ls = defaultTargetPlatform == TargetPlatform.android
+      // เว็บ: ต้องใช้ LocationSettings ธรรมดา (AppleSettings/AndroidSettings ใช้กับ geolocator_web ไม่ได้ -> GPS ไม่ทำงานบน iOS/Android เว็บ)
+      final LocationSettings ls = kIsWeb
+          ? const LocationSettings(accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 0)
+          : (defaultTargetPlatform == TargetPlatform.android
           ? AndroidSettings(
               accuracy: LocationAccuracy.best,
               distanceFilter: 0,
@@ -723,7 +732,7 @@ class GaugeController extends ChangeNotifier {
                   distanceFilter: 0,
                   pauseLocationUpdatesAutomatically: false,
                 )
-              : const LocationSettings(accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 0));
+              : const LocationSettings(accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 0)));
       _gpsSub = Geolocator.getPositionStream(locationSettings: ls).listen((p) {
         if (demo) return; // DEMO ใช้ GPS จำลอง (ไม่ให้ GPS จริงที่จอดนิ่งมาทับ)
         final now = DateTime.now().millisecondsSinceEpoch;
