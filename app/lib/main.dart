@@ -405,6 +405,7 @@ class GaugeController extends ChangeNotifier {
   LinkState link = LinkState.idle;
   bool demo = false;
   bool gpsOk = false;
+  String? gpsErr; // เว็บ: เหตุผลที่อ่าน GPS ไม่ได้ (โชว์บนจอให้ผู้ใช้รู้ว่าติดตรงไหน)
   double? gpsSpeed; // km/h — ค่าที่โชว์ (เลื่อนนุ่มระหว่างจุด GPS)
   double? gpsRaw;   // km/h — ค่าที่วัดได้จริง (ผ่านตัวกรองแล้ว) ใช้บันทึกความเร็วสูงสุด/DRAG
   double _gFrom = 0, _gTo = 0;
@@ -696,11 +697,20 @@ class GaugeController extends ChangeNotifier {
   }
 
   Future<void> init() async {
-    if (!kShotMode) await WakelockPlus.enable();
     _gTimer?.cancel();
     _gTimer = Timer.periodic(const Duration(milliseconds: 200), (_) => _gSample());
     _dragLoad();
-    if (!kShotMode) await _startGps();
+    if (!kShotMode) {
+      // ล็อกจอไม่ให้ดับ: ถ้าล้มเหลว (เช่น Safari/Bluefy บน iOS ไม่รองรับ) ต้องไม่บล็อกการเริ่ม GPS
+      try { await WakelockPlus.enable(); } catch (_) {}
+      await _startGps();
+    }
+  }
+
+  // เว็บ: ให้ผู้ใช้กดลองขอสิทธิ์ตำแหน่งใหม่ (iOS บางทีต้องกดก่อนถึงจะเด้งกล่องถาม)
+  Future<void> retryGps() async {
+    if (kIsWeb) webGpsStop();
+    await _startGps();
   }
 
   Future<void> _startGps() async {
@@ -735,7 +745,10 @@ class GaugeController extends ChangeNotifier {
               : const LocationSettings(accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 0)));
       if (kIsWeb) {
         // เว็บ: อ่าน GPS จากเบราว์เซอร์ตรงๆ แล้วแปลงเป็น Position ป้อนตัวจัดการเดียวกับเนทีฟ
+        gpsErr = 'กำลังขอตำแหน่ง…';
+        notifyListeners();
         webGpsStart((lat, lon, accM, spdMs, hdg, tsMs) {
+          gpsErr = null;
           _onPos(Position(
             latitude: lat, longitude: lon,
             timestamp: DateTime.fromMillisecondsSinceEpoch(tsMs > 0 ? tsMs : DateTime.now().millisecondsSinceEpoch),
@@ -744,7 +757,17 @@ class GaugeController extends ChangeNotifier {
             heading: hdg < 0 ? 0 : hdg, headingAccuracy: 0,
             speed: spdMs, speedAccuracy: -1,
           ));
-        }, (code, msg) { gpsOk = false; notifyListeners(); });
+        }, (code, msg) {
+          gpsOk = false;
+          gpsErr = switch (code) {
+            1 => 'ตำแหน่งถูกปฏิเสธ: เปิดสิทธิ์ที่ aA > ตั้งค่าเว็บไซต์ > ตำแหน่ง',
+            2 => 'หาตำแหน่งไม่ได้ (เปิด Location Services ของเครื่อง)',
+            3 => 'หมดเวลา: ลองใหม่อีกครั้ง',
+            -2 => 'เบราว์เซอร์นี้ไม่รองรับ GPS: ลองใช้ Safari',
+            _ => 'GPS ไม่ทำงาน: $msg',
+          };
+          notifyListeners();
+        });
       } else {
         _gpsSub = Geolocator.getPositionStream(locationSettings: ls).listen(_onPos, onError: (_) {
           gpsOk = false;
@@ -1856,7 +1879,13 @@ class _GaugePageState extends State<GaugePage> {
                     child: Row(children: [
                       _chip(linkTxt, linkCol),
                       _chip(c.ecuLive || c.demo ? 'ECU LIVE' : 'NO ECU', c.ecuLive || c.demo ? kGreen : kBad),
-                      _chip(c.gpsOk ? 'GPS' : 'NO GPS', c.gpsOk ? kGreen : kBad),
+                      if (kIsWeb && !c.gpsOk)
+                        GestureDetector(
+                          onTap: () => c.retryGps(),
+                          child: _chip('GPS: TAP', kAmber),
+                        )
+                      else
+                        _chip(c.gpsOk ? 'GPS' : 'NO GPS', c.gpsOk ? kGreen : kBad),
                     ]),
                   ),
                 ),
@@ -1878,6 +1907,19 @@ class _GaugePageState extends State<GaugePage> {
                   }),
                 ],
               ]),
+              // เว็บ: บอกสาเหตุ GPS ให้ผู้ใช้เห็น (แตะเพื่อลองใหม่)
+              if (kIsWeb && !c.gpsOk && c.gpsErr != null) ...[
+                const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: () => c.retryGps(),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(color: kAmber.withOpacity(0.15), borderRadius: BorderRadius.circular(6), border: Border.all(color: kAmber.withOpacity(0.5))),
+                    child: Text('GPS: ${c.gpsErr}', style: const TextStyle(fontSize: 11, color: kAmber)),
+                  ),
+                ),
+              ],
               const SizedBox(height: 6),
               Expanded(
                 child: Padding(
