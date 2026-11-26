@@ -19,3 +19,6 @@ bool get webPortrait => false;
 
 void webFullscreenToggle() {}
 bool get webFullscreen => false;
+
+void webGpsStart(void Function(double, double, double, double, double, int) onPos, void Function(int, String) onErr) {}
+void webGpsStop() {}

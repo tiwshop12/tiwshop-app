@@ -140,3 +140,46 @@ bool get webFullscreen {
     return false;
   }
 }
+
+// GPS บนเว็บ: เรียก navigator.geolocation.watchPosition ตรงๆ (geolocator_web มีปัญหากับ Safari/iOS)
+int? _gpsWatchId;
+
+/// เริ่มอ่านตำแหน่งจากเบราว์เซอร์ ; เบราว์เซอร์จะถามสิทธิ์เองเมื่อเรียกครั้งแรก
+/// onPos(lat, lon, accM, speedMs, headingDeg, tsMs) — ค่า -1 = เบราว์เซอร์ไม่บอก
+void webGpsStart(
+    void Function(double lat, double lon, double accM, double speedMs, double headingDeg, int tsMs) onPos,
+    void Function(int code, String msg) onErr) {
+  final geo = _nav()?.getProperty<JSObject?>('geolocation'.toJS);
+  if (geo == null) { onErr(-2, 'no geolocation'); return; }
+  double rd(JSObject o, String k) {
+    final v = o.getProperty<JSAny?>(k.toJS);
+    return v == null ? -1 : (v as JSNumber).toDartDouble;
+  }
+  final success = (JSObject pos) {
+    final coords = pos.getProperty<JSObject>('coords'.toJS);
+    final ts = pos.getProperty<JSAny?>('timestamp'.toJS);
+    final tsMs = ts == null ? 0 : (ts as JSNumber).toDartDouble.round();
+    onPos(rd(coords, 'latitude'), rd(coords, 'longitude'), rd(coords, 'accuracy'),
+        rd(coords, 'speed'), rd(coords, 'heading'), tsMs);
+  }.toJS;
+  final error = (JSObject err) {
+    final c = err.getProperty<JSAny?>('code'.toJS);
+    final m = err.getProperty<JSAny?>('message'.toJS);
+    onErr(c == null ? 0 : (c as JSNumber).toDartInt, m == null ? '' : (m as JSString).toDart);
+  }.toJS;
+  final opts = {'enableHighAccuracy': true, 'maximumAge': 0, 'timeout': 30000}.jsify();
+  try {
+    _gpsWatchId = geo.callMethod<JSNumber>('watchPosition'.toJS, success, error, opts).toDartInt;
+  } catch (e) {
+    onErr(-3, e.toString());
+  }
+}
+
+void webGpsStop() {
+  final geo = _nav()?.getProperty<JSObject?>('geolocation'.toJS);
+  final id = _gpsWatchId;
+  if (geo != null && id != null) {
+    try { geo.callMethod<JSAny?>('clearWatch'.toJS, id.toJS); } catch (_) {}
+  }
+  _gpsWatchId = null;
+}

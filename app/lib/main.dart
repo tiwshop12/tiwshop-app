@@ -733,7 +733,48 @@ class GaugeController extends ChangeNotifier {
                   pauseLocationUpdatesAutomatically: false,
                 )
               : const LocationSettings(accuracy: LocationAccuracy.bestForNavigation, distanceFilter: 0)));
-      _gpsSub = Geolocator.getPositionStream(locationSettings: ls).listen((p) {
+      if (kIsWeb) {
+        // เว็บ: อ่าน GPS จากเบราว์เซอร์ตรงๆ แล้วแปลงเป็น Position ป้อนตัวจัดการเดียวกับเนทีฟ
+        webGpsStart((lat, lon, accM, spdMs, hdg, tsMs) {
+          _onPos(Position(
+            latitude: lat, longitude: lon,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(tsMs > 0 ? tsMs : DateTime.now().millisecondsSinceEpoch),
+            accuracy: accM < 0 ? 0 : accM,
+            altitude: 0, altitudeAccuracy: 0,
+            heading: hdg < 0 ? 0 : hdg, headingAccuracy: 0,
+            speed: spdMs, speedAccuracy: -1,
+          ));
+        }, (code, msg) { gpsOk = false; notifyListeners(); });
+      } else {
+        _gpsSub = Geolocator.getPositionStream(locationSettings: ls).listen(_onPos, onError: (_) {
+          gpsOk = false;
+          notifyListeners();
+        });
+      }
+      // ถ้าไม่มีข้อมูล GPS เกิน 4 วินาที ถือว่าสัญญาณหาย
+      _gpsWatch?.cancel();
+      _gpsWatch = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (gpsOk && DateTime.now().millisecondsSinceEpoch - _gpsLastMs > 4000) {
+          gpsOk = false;
+          if (dragSt == DragSt.run) {
+            _dragFinish(); // สัญญาณ GPS หายกลางรอบ: หยุดนาฬิกา เก็บช่วงที่วัดได้
+          }
+          _rPrevKmh = null; // ต้องได้ค่าต่ำกว่า 5 km/h ใหม่ก่อนออกตัวรอบถัดไป
+          gpsRaw = null; // สัญญาณกลับมาใหม่ ไม่เทียบกับค่าเก่า
+          _gLastV = null;
+          _gPrevFixMs = 0;
+          _gSpikeN = 0;
+          _gMoving = false;
+          _gMoveN = 0;
+          _gHist.clear();
+          notifyListeners();
+        }
+      });
+    } catch (_) {}
+  }
+
+  // TIWSHOP: ตัวจัดการค่าตำแหน่งจาก GPS (ใช้ร่วมกันทั้งเนทีฟและเว็บ)
+  void _onPos(Position p) {
         if (demo) return; // DEMO ใช้ GPS จำลอง (ไม่ให้ GPS จริงที่จอดนิ่งมาทับ)
         final now = DateTime.now().millisecondsSinceEpoch;
         gpsOk = true;
@@ -805,30 +846,6 @@ class GaugeController extends ChangeNotifier {
         _track();
         _sendGps();
         notifyListeners();
-      }, onError: (_) {
-        gpsOk = false;
-        notifyListeners();
-      });
-      // ถ้าไม่มีข้อมูล GPS เกิน 4 วินาที ถือว่าสัญญาณหาย
-      _gpsWatch?.cancel();
-      _gpsWatch = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (gpsOk && DateTime.now().millisecondsSinceEpoch - _gpsLastMs > 4000) {
-          gpsOk = false;
-          if (dragSt == DragSt.run) {
-            _dragFinish(); // สัญญาณ GPS หายกลางรอบ: หยุดนาฬิกา เก็บช่วงที่วัดได้
-          }
-          _rPrevKmh = null; // ต้องได้ค่าต่ำกว่า 5 km/h ใหม่ก่อนออกตัวรอบถัดไป
-          gpsRaw = null; // สัญญาณกลับมาใหม่ ไม่เทียบกับค่าเก่า
-          _gLastV = null;
-          _gPrevFixMs = 0;
-          _gSpikeN = 0;
-          _gMoving = false;
-          _gMoveN = 0;
-          _gHist.clear();
-          notifyListeners();
-        }
-      });
-    } catch (_) {}
   }
 
   /// อัปเดตตัวเลขความเร็วบนจอ ~30 ครั้ง/วินาที ระหว่างจุด GPS (ชิป GPS มือถือส่วนใหญ่ให้ค่าแค่ 1 ครั้ง/วินาที)
@@ -1537,6 +1554,7 @@ class GaugeController extends ChangeNotifier {
     _dataSub?.cancel();
     _connSub?.cancel();
     _gpsSub?.cancel();
+    webGpsStop();
     _gpsWatch?.cancel();
     _gpsAnim?.cancel();
     _gnssSub?.cancel();
