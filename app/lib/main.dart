@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'ecu_db.dart';
@@ -33,6 +34,16 @@ const kSvcS = '7a0f0001-5a41-5201-9c11-2a52a1c0de01', kDataS = '7a0f0002-5a41-52
     kImgS = '7a0f0004-5a41-5201-9c11-2a52a1c0de01', kFileS = '7a0f0005-5a41-5201-9c11-2a52a1c0de01';
 
 const kFont = 'Ethnocentric';
+// TIWSHOP: ให้ PageView ลากด้วยเมาส์ได้บนคอม/เว็บ (ปกติ Flutter ปิดการลากด้วยเมาส์ไว้)
+class _DragAnyBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.stylus,
+      };
+}
 // ถ่ายรูปหน้าจอแอพอัตโนมัติ (test/shots_test.dart): ไม่เรียก GPS / ล็อกจอ
 bool kShotMode = false;
 const kGreen = Color(0xFF3CFF8A);
@@ -1844,28 +1855,38 @@ class _GaugePageState extends State<GaugePage> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 14),
-                  child: PageView(
-                    controller: pc,
-                    onPageChanged: (i) {
-                      c.graphVisible = i == 3;
-                      c.dtcWatch(i == 6); // หน้า DTC: ให้เกจอ่านโค้ดต่อเนื่อง
-                      setState(() => page = i);
-                    },
-                    // TIWSHOP: สร้างเฉพาะหน้าที่เห็นบนจอ (เดิมสร้างครบ 6 หน้าทุกครั้งที่ค่าเปลี่ยน)
-                    children: [
-                      for (int pi = 0; pi < 8; pi++)
-                        RepaintBoundary(child: Builder(builder: (_) => switch (pi) {
-                              0 => DashPage(c: c),
-                              1 => _mainPage(th, blinkOn),
-                              2 => _gridPage(th, blinkOn),
-                              3 => _graphPage(th),
-                              4 => _afrPage(th),
-                              5 => _dragPage(th),
-                              6 => _dtcPage(th),
-                              _ => TopSpeedPage(c: c),
-                            })),
+                  child: Stack(children: [
+                    ScrollConfiguration(
+                      behavior: _DragAnyBehavior(),
+                      child: PageView(
+                        controller: pc,
+                        onPageChanged: (i) {
+                          c.graphVisible = i == 3;
+                          c.dtcWatch(i == 6); // หน้า DTC: ให้เกจอ่านโค้ดต่อเนื่อง
+                          setState(() => page = i);
+                        },
+                        // TIWSHOP: สร้างเฉพาะหน้าที่เห็นบนจอ (เดิมสร้างครบ 6 หน้าทุกครั้งที่ค่าเปลี่ยน)
+                        children: [
+                          for (int pi = 0; pi < 8; pi++)
+                            RepaintBoundary(child: Builder(builder: (_) => switch (pi) {
+                                  0 => DashPage(c: c),
+                                  1 => _mainPage(th, blinkOn),
+                                  2 => _gridPage(th, blinkOn),
+                                  3 => _graphPage(th),
+                                  4 => _afrPage(th),
+                                  5 => _dragPage(th),
+                                  6 => _dtcPage(th),
+                                  _ => TopSpeedPage(c: c),
+                                })),
+                        ],
+                      ),
+                    ),
+                    // TIWSHOP: ปุ่มลูกศรเปลี่ยนหน้าสำหรับคอม/เว็บ (ไม่มีการปัดนิ้ว)
+                    if (kIsWeb) ...[
+                      _pageArrow(th, left: true),
+                      _pageArrow(th, left: false),
                     ],
-                  ),
+                  ]),
                 ),
               ),
             ]),
@@ -1874,21 +1895,27 @@ class _GaugePageState extends State<GaugePage> {
         // ตัวบอกหน้า: สี่เหลี่ยมแนวนอน + ชื่อหน้า
         Positioned(
           left: 0, right: 0, bottom: 3,
-          child: IgnorePointer(
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              for (int i = 0; i < 8; i++)
-                Container(
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            // TIWSHOP: จุดบอกหน้าแตะเพื่อกระโดดไปหน้านั้นได้ (ช่วยคอม/เว็บ)
+            for (int i = 0; i < 8; i++)
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _goPage(i),
+                child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: i == page ? 24 : 14, height: 5,
-                  decoration: BoxDecoration(
-                    color: i == page ? th.c : Colors.white30,
-                    borderRadius: BorderRadius.circular(1.5),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Container(
+                    width: i == page ? 24 : 14, height: 5,
+                    decoration: BoxDecoration(
+                      color: i == page ? th.c : Colors.white30,
+                      borderRadius: BorderRadius.circular(1.5),
+                    ),
                   ),
                 ),
-              const SizedBox(width: 8),
-              Text(const ['DASH', 'GAUGE', 'GRID', 'GRAPH', 'AFR LOG', 'DRAG LOG', 'DTC', 'TOP SPEED'][page], style: const TextStyle(fontFamily: kFont, fontSize: 7, color: Colors.white54)),
-            ]),
-          ),
+              ),
+            const SizedBox(width: 8),
+            IgnorePointer(child: Text(const ['DASH', 'GAUGE', 'GRID', 'GRAPH', 'AFR LOG', 'DRAG LOG', 'DTC', 'TOP SPEED'][page], style: const TextStyle(fontFamily: kFont, fontSize: 7, color: Colors.white54))),
+          ]),
         ),
         // แสงเตือน SHIFT: แดงฟุ้งจากขอบทั้ง 4 เข้ากลางจอ กระพริบ
         Positioned.fill(
@@ -1905,6 +1932,44 @@ class _GaugePageState extends State<GaugePage> {
   }
 
   // ----- หน้า 1: เกจ -----
+  // TIWSHOP: กระโดด/เลื่อนไปหน้าที่กำหนด (ใช้โดยจุดบอกหน้า + ปุ่มลูกศรบนคอม)
+  void _goPage(int i) {
+    i = i.clamp(0, 7);
+    if (!pc.hasClients) return;
+    pc.animateToPage(i, duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
+  }
+
+  // TIWSHOP: ปุ่มลูกศรซ้าย/ขวา ลอยบนขอบจอ สำหรับคอม/เว็บ
+  Widget _pageArrow(AppTheme th, {required bool left}) {
+    final enabled = left ? page > 0 : page < 7;
+    return Positioned(
+      left: left ? 2 : null,
+      right: left ? null : 2,
+      top: 0, bottom: 0,
+      child: Center(
+        child: Opacity(
+          opacity: enabled ? 0.85 : 0.2,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: enabled ? () => _goPage(left ? page - 1 : page + 1) : null,
+            child: MouseRegion(
+              cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+              child: Container(
+                width: 38, height: 54,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.42),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: th.c.withOpacity(0.5), width: 1),
+                ),
+                child: Icon(left ? Icons.chevron_left : Icons.chevron_right, color: th.c, size: 30),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _mainPage(AppTheme th, bool blinkOn) {
     final m = Cfg.i.main;
     return LayoutBuilder(builder: (_, all) {
