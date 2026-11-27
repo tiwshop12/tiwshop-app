@@ -1,11 +1,16 @@
 // TIWSHOP TUNER — แอพช่าง: จูน ECU ผ่านสาย USB (ตรงเข้า ECU) และเชื่อมต่อเกจผ่านบลูทูธ
 // ขั้น 1: เชื่อมต่อ + พิสูจน์สาย/เกจ (อ่านอย่างเดียว ยังไม่เขียน ECU)
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:usb_serial_next/usb_serial_next.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'kline.dart';
 import 'ecu_db.dart';
+import 'tune.dart';
 
 // GATT ของเกจ TIWSHOP (ตรงกับเฟิร์มแวร์)
 const _suffix = '-5a41-5201-9c11-2a52a1c0de01';
@@ -60,6 +65,10 @@ class _HomePageState extends State<HomePage> {
   BluetoothDevice? _dev;
   StreamSubscription<List<ScanResult>>? _scanSub;
   StreamSubscription<BluetoothConnectionState>? _connSub;
+
+  // live cache สำหรับโหมด LIVE ในหน้าจูน (ดึงจากสาย)
+  Live? _liveCache;
+  Timer? _liveTimer;
 
   void _say(String s) {
     final t = TimeOfDay.now();
@@ -234,7 +243,76 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _startLivePoll() async {
+    final kl = _kl;
+    if (kl == null) return;
+    try { await kl.pickEngineTable(); } catch (_) {}
+    _liveTimer?.cancel();
+    _liveTimer = Timer.periodic(const Duration(milliseconds: 300), (_) async {
+      try {
+        final lv = await kl.readEngine();
+        if (lv != null) _liveCache = lv;
+      } catch (_) {}
+    });
+  }
+
+  void _stopLivePoll() {
+    _liveTimer?.cancel();
+    _liveTimer = null;
+  }
+
+  Future<void> _saveBin(String name, Uint8List bytes) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final safe = name.toLowerCase().endsWith('.bin') ? name : '$name.bin';
+      final f = File('${dir.path}/$safe');
+      await f.writeAsBytes(bytes);
+      _say('บันทึก BIN ที่แก้แล้ว: ${f.path}');
+    } catch (e) {
+      _say('บันทึกไม่สำเร็จ: $e');
+    }
+  }
+
+  Future<void> _openTuneFromFiles() async {
+    final binRes = await FilePicker.platform.pickFiles(withData: true, dialogTitle: 'เลือกไฟล์ BIN');
+    if (binRes == null || binRes.files.isEmpty) return;
+    final bf = binRes.files.first;
+    final bin = bf.bytes;
+    if (bin == null) {
+      _say('อ่านไฟล์ BIN ไม่ได้');
+      return;
+    }
+    final xdfRes = await FilePicker.platform.pickFiles(withData: true, dialogTitle: 'เลือกไฟล์ XDF');
+    if (xdfRes == null || xdfRes.files.isEmpty) {
+      _say('ยังไม่ได้เลือก XDF');
+      return;
+    }
+    final xb = xdfRes.files.first.bytes;
+    if (xb == null) {
+      _say('อ่านไฟล์ XDF ไม่ได้');
+      return;
+    }
+    final doc = XdfDoc.parse(String.fromCharCodes(xb));
+    if (doc.items.isEmpty) {
+      _say('XDF นี้ไม่มีพารามิเตอร์ หรือเป็นแบบเข้ารหัส');
+      return;
+    }
+    if (!mounted) return;
+    final cable = link == Link.usb;
+    if (cable) await _startLivePoll();
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => TunePage(
+          fileName: bf.name,
+          bin: Uint8List.fromList(bin),
+          xdf: doc,
+          getRpm: cable ? () => _liveCache?.rpm : null,
+          getTps: cable ? () => _liveCache?.tps : null,
+          onSave: (name, bytes) async => _saveBin(name, bytes),
+        )));
+    _stopLivePoll();
+  }
+
   Future<void> _disconnect() async {
+    _stopLivePoll();
     await _kl?.dispose();
     _kl = null;
     try {
@@ -299,6 +377,16 @@ class _HomePageState extends State<HomePage> {
               icon: Icons.bluetooth, color: kGreen, title: 'เชื่อมต่อเกจ', sub: 'บลูทูธ',
               active: link == Link.ble, onTap: connected ? null : _connectBle)),
           ]),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 48,
+            child: OutlinedButton.icon(
+              onPressed: _busy ? null : _openTuneFromFiles,
+              style: OutlinedButton.styleFrom(foregroundColor: kAmber, side: const BorderSide(color: kAmber)),
+              icon: const Icon(Icons.tune),
+              label: const Text('จูนไฟล์ (เปิด BIN + XDF)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            ),
+          ),
           if (link == Link.usb) ...[
             const SizedBox(height: 12),
             SizedBox(
