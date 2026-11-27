@@ -302,6 +302,7 @@ class Telemetry {
   final int flashState, flashPct, flashVendor, fileRx;
   final bool flashSup; // เฟิร์มแวร์รองรับการเขียนไฟล์ (แพ็กเกจยาว >= 79 ไบต์)
   final String? ecmId; // รหัส ECM 5 ไบต์ (hex) จากกล่องที่ต่ออยู่ (แพ็กเกจ >= 84)
+  final int? flashCount; // จำนวนครั้งที่กล่องถูกเขียน (อ่านผ่านสายเท่านั้น ; BLE = null)
   EcuInfo? get ecu => ecuLookup(ecmId);
   Telemetry({
     this.fresh = false, this.state = 0, this.proto = 0, this.bike = 0, this.img = 0,
@@ -310,7 +311,7 @@ class Telemetry {
     this.fwMaj, this.fwMin, this.fwPatch,
     this.dtcSup = false, this.dtcValid = false, this.dtcClear = 0, this.dtcCur = const [], this.dtcSto = const [],
     this.flashState = 0, this.flashPct = 0, this.flashVendor = 0, this.fileRx = 0, this.flashSup = false,
-    this.ecmId,
+    this.ecmId, this.flashCount,
   });
   String? get fwText => fwMaj == null ? null : '$fwMaj.$fwMin.$fwPatch';
 
@@ -1184,11 +1185,27 @@ class GaugeController extends ChangeNotifier {
     _cablePoll = Timer.periodic(const Duration(milliseconds: 220), (_) => _cableTick());
   }
 
+  int _cFail = 0;
+  bool _cReconnecting = false;
   Future<void> _cableTick() async {
     final s = _cable;
-    if (s == null || _cFlashing) return;
+    if (s == null || _cFlashing || _cReconnecting) return;
     Map<String, double?>? m;
     try { m = await s.readLive(); } catch (_) { m = null; }
+    if (_cable == null) return;
+    if (m == null) {
+      _cFail++;
+      // อ่านไม่ได้ติดกัน (เช่น อัดเสร็จ/ปิดเปิดกุญแจ) -> ต่อ ECU ใหม่อัตโนมัติ
+      if (_cFail >= 5) {
+        _cReconnecting = true;
+        bool ok = false;
+        try { ok = await s.reconnect(); } catch (_) {}
+        _cReconnecting = false;
+        if (ok) _cFail = 0;
+      }
+    } else {
+      _cFail = 0;
+    }
     if (_cable == null) return;
     t = _cableTel(m);
     notifyListeners();
@@ -1198,6 +1215,7 @@ class GaugeController extends ChangeNotifier {
         fresh: m != null,
         flashSup: true,
         ecmId: _cable?.ecmIdHex,
+        flashCount: _cable?.flashCount,
         flashState: _cFlashState, flashPct: _cFlashPct,
         rpm: m?['rpm'], tps: m?['tps'], ect: m?['ect'], eot: m?['eot'],
         iat: m?['iat'], map: m?['map'], batt: m?['batt'], inj: m?['inj'],

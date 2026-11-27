@@ -16,7 +16,9 @@ const bool cableSupported = true;
 // ---------- โหมดเชื่อมต่อผ่านสาย (ให้ทั้งแอพใช้เหมือน BLE) ----------
 abstract class CableSession {
   Future<bool> connect();
+  Future<bool> reconnect(); // ต่อ ECU ใหม่ (ใช้พอร์ตเดิม) หลังอัด/ปิดเปิดกุญแจ
   String? get ecmIdHex;
+  int? get flashCount; // จำนวนครั้งที่กล่องถูกเขียน
   Future<Map<String, double?>?> readLive();
   Future<bool> flash(Uint8List bin, int vendorReq, void Function(int state, int pct) onProgress, void Function(String msg) onLog);
   Future<void> dispose();
@@ -28,9 +30,31 @@ class _CableSessionImpl implements CableSession {
   UsbSerialPort? _port;
   KLine? _kl;
   final List<int> _ecm = [];
+  int? _flashCount;
 
   @override
   String? get ecmIdHex => _ecm.length >= 5 ? _ecm.take(5).map((b) => b.toRadixString(16).padLeft(2, '0')).join().toUpperCase() : null;
+
+  @override
+  int? get flashCount => _flashCount;
+
+  // อ่านรหัสกล่อง + จำนวนแฟลช + ล็อกตาราง (ใช้ตอน connect และ reconnect)
+  Future<void> _ident() async {
+    final kl = _kl!;
+    final id = await kl.readEcuId();
+    if (id != null) {
+      _ecm
+        ..clear()
+        ..addAll(id);
+      kl.profile = KLine.profileFromName(ecuModelFromId(id) ?? '');
+    }
+    // จำนวนแฟลช: Keihin 7D 06 01 01 03 78 ; ถ้าไม่ตอบ ลอง Shindengen 7B 06 02 01 03 79 ; ค่า = reply[6]
+    _flashCount = null;
+    var r = await kl.flCmd([0x7D, 0x06, 0x01, 0x01, 0x03, 0x78]);
+    r ??= await kl.flCmd([0x7B, 0x06, 0x02, 0x01, 0x03, 0x79], sleepMs: 150);
+    if (r != null && r.length >= 7) _flashCount = r[6];
+    await kl.pickEngineTable();
+  }
 
   @override
   Future<bool> connect() async {
@@ -45,14 +69,16 @@ class _CableSessionImpl implements CableSession {
     final kl = KLine(_port!);
     _kl = kl;
     if (!await kl.init()) return false;
-    final id = await kl.readEcuId();
-    if (id != null) {
-      _ecm
-        ..clear()
-        ..addAll(id);
-      kl.profile = KLine.profileFromName(ecuModelFromId(id) ?? '');
-    }
-    await kl.pickEngineTable();
+    await _ident();
+    return true;
+  }
+
+  @override
+  Future<bool> reconnect() async {
+    final kl = _kl;
+    if (kl == null) return false;
+    if (!await kl.init()) return false;
+    await _ident();
     return true;
   }
 

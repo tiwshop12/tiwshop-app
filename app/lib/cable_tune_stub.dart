@@ -6,7 +6,9 @@ const bool cableSupported = false;
 
 abstract class CableSession {
   Future<bool> connect();
+  Future<bool> reconnect();
   String? get ecmIdHex;
+  int? get flashCount;
   Future<Map<String, double?>?> readLive();
   Future<bool> flash(Uint8List bin, int vendorReq, void Function(int state, int pct) onProgress, void Function(String msg) onLog);
   Future<void> dispose();
