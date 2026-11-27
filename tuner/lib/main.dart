@@ -225,6 +225,7 @@ class _HomePageState extends State<HomePage> {
       final hex = id.map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase()).join(' ');
       _say('ECM ID: $hex');
       final model = ecuModelFromId(id);
+      kl.profile = KLine.profileFromName(model ?? '');
       _say(model != null ? '✓ รุ่น: $model' : 'รุ่น: ยังไม่รู้จัก (ไม่มีในฐานข้อมูล)');
     } catch (e) {
       _say('ผิดพลาด: $e');
@@ -311,6 +312,19 @@ class _HomePageState extends State<HomePage> {
                 label: Text(_busy ? 'กำลังอ่าน…' : 'อ่าน ECM ID / รู้จักรุ่น', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
               ),
             ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: _busy ? null : () {
+                  final kl = _kl;
+                  if (kl != null) Navigator.push(context, MaterialPageRoute(builder: (_) => LivePage(kl)));
+                },
+                style: OutlinedButton.styleFrom(foregroundColor: kGreen, side: const BorderSide(color: kGreen)),
+                icon: const Icon(Icons.speed),
+                label: const Text('ดูค่าการทำงาน (Live)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              ),
+            ),
           ],
           const SizedBox(height: 14),
           const Align(alignment: Alignment.centerLeft, child: Text('บันทึก', style: TextStyle(color: kMut, fontWeight: FontWeight.bold))),
@@ -355,6 +369,102 @@ class _HomePageState extends State<HomePage> {
           Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           Text(sub, style: const TextStyle(color: kMut, fontSize: 12)),
         ]),
+      ),
+    );
+  }
+}
+
+// ---------- ค่าการทำงาน (Live) ----------
+class LivePage extends StatefulWidget {
+  final KLine kl;
+  const LivePage(this.kl, {super.key});
+  @override
+  State<LivePage> createState() => _LivePageState();
+}
+
+class _LivePageState extends State<LivePage> {
+  Timer? _timer;
+  Live? _live;
+  String _msg = 'กำลังเริ่ม…';
+  bool _poll = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  Future<void> _start() async {
+    setState(() => _msg = 'กำลังหาตารางข้อมูล…');
+    var t = await widget.kl.pickEngineTable();
+    if (t == null) {
+      setState(() => _msg = 'เชื่อมต่อ ECU ใหม่…');
+      if (await widget.kl.init()) t = await widget.kl.pickEngineTable();
+    }
+    if (t == null) {
+      if (mounted) setState(() => _msg = 'อ่านค่าไม่ได้ — เช็กการต่อ ECU / ไฟ 12V');
+      return;
+    }
+    if (mounted) setState(() => _msg = 'ตาราง 0x${t!.toRadixString(16).toUpperCase()}');
+    _timer = Timer.periodic(const Duration(milliseconds: 250), (_) async {
+      if (_poll) return;
+      _poll = true;
+      try {
+        final lv = await widget.kl.readEngine();
+        if (lv != null && mounted) setState(() => _live = lv);
+      } catch (_) {}
+      _poll = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _f(double? v, int dp, [String suf = '']) => v == null ? '—' : '${v.toStringAsFixed(dp)}$suf';
+
+  @override
+  Widget build(BuildContext context) {
+    final lv = _live;
+    final tiles = <List<String>>[
+      ['รอบเครื่อง', _f(lv?.rpm, 0), 'rpm'],
+      ['TPS', _f(lv?.tps, 1, '%'), _f(lv?.tpsV, 2, ' V')],
+      ['อุณหภูมิ', _f(lv?.ect ?? lv?.eot, 1, '°C'), lv?.eot != null ? 'น้ำมันเครื่อง' : 'น้ำ/เครื่อง'],
+      ['IAT อากาศ', _f(lv?.iat, 1, '°C'), ''],
+      ['MAP', _f(lv?.map, 0), ''],
+      ['แบตเตอรี่', _f(lv?.batt, 1, ' V'), ''],
+      ['หัวฉีด', _f(lv?.inj, 2, ' ms'), ''],
+      ['องศาไฟ', _f(lv?.ign, 1, '°'), ''],
+      ['ความเร็ว', _f(lv?.speed, 0, ' กม/ชม'), ''],
+      ['LTFT', _f(lv?.ltft, 2), ''],
+    ];
+    return Scaffold(
+      appBar: AppBar(backgroundColor: kBg, title: const Text('ค่าการทำงาน'), actions: [
+        Padding(padding: const EdgeInsets.only(right: 12), child: Center(child: Text(_msg, style: const TextStyle(color: kMut, fontSize: 12)))),
+      ]),
+      body: Padding(
+        padding: const EdgeInsets.all(12),
+        child: GridView.count(
+          crossAxisCount: 2,
+          childAspectRatio: 1.7,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          children: [
+            for (final t in tiles)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(12)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Text(t[0], style: const TextStyle(color: kMut, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text(t[1], style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: kCyan)),
+                  if (t[2].isNotEmpty) Text(t[2], style: const TextStyle(color: kMut, fontSize: 11)),
+                ]),
+              ),
+          ],
+        ),
       ),
     );
   }

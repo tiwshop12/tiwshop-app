@@ -127,4 +127,115 @@ class KLine {
     }
     return null;
   }
+
+  // ---------- ค่าการทำงาน (live data) ----------
+  // โปรไฟล์ถอดรหัส: 0=WAVE 1=LEAD 2=PCX 3=GIORNO (ย้ายจาก profileFromName ของเฟิร์มแวร์)
+  int profile = 0; // BM_WAVE
+  static int profileFromName(String nm) {
+    if (nm.contains('PCX') || nm.contains('ADV')) return 2;
+    if (nm.contains('Click 150') || nm.contains('Click 160')) return 2;
+    if (nm.contains('Lead 125 4V')) return 1;
+    if (nm.contains('Giorno')) return 3;
+    return 0; // WAVE และกลุ่มเลย์เอาต์มาตรฐาน
+  }
+
+  int? _tableA; // ตารางเครื่องยนต์ที่กล็อกได้
+
+  // หา/ล็อกตารางเครื่องยนต์ (PCX ลอง 0x11 ก่อน, อื่น ๆ 0x17 ก่อน แล้วไล่รายการ)
+  Future<int?> pickEngineTable() async {
+    final cands = <int>[profile == 2 ? 0x11 : 0x17, 0x10, 0x11, 0x13, 0x17];
+    final seen = <int>{};
+    for (final id in cands) {
+      if (!seen.add(id)) continue;
+      final d = await readBlock(0x71, id, 400);
+      if (d != null && d.length > 0) {
+        _tableA = id;
+        return id;
+      }
+    }
+    return null;
+  }
+
+  Future<Live?> readEngine([int? id]) async {
+    final t = id ?? _tableA;
+    if (t == null) return null;
+    final d = await readBlock(0x71, t, 1000);
+    if (d == null) return null;
+    return _decodeEngine(t, d);
+  }
+
+  Live? _decodeEngine(int id, List<int> d) {
+    switch (id) {
+      case 0x10:
+      case 0x11:
+      case 0x13:
+        return profile == 2 ? _decPcx(d) : _decStd(d);
+      case 0x17:
+        return _dec17(d);
+      default:
+        return null;
+    }
+  }
+
+  double? _t(int v) => v == 0xFF ? null : (v - 40).toDouble();
+
+  Live? _decStd(List<int> d) {
+    if (d.length < 18) return null;
+    return Live(
+      rpm: ((d[0] << 8) | d[1]).toDouble(),
+      tpsV: d[2] * 5.0 / 256.0,
+      tps: d[3] * 0.5,
+      ect: d[5] - 40.0,
+      iat: d[7] - 40.0,
+      map: d[9].toDouble(),
+      batt: d[12] * 0.1,
+      inj: ((d[14] << 8) | d[15]) / 200.0,
+      ign: -64.0 + d[16] * 0.5,
+      speed: d[17].toDouble(),
+    );
+  }
+
+  Live? _decPcx(List<int> d) {
+    if (d.length < 18) return null;
+    return Live(
+      rpm: ((d[0] << 8) | d[1]).toDouble(),
+      tpsV: d[2] * 5.0 / 256.377,
+      tps: d[3] * 0.5,
+      ect: _t(d[5]),
+      iat: _t(d[7]),
+      map: d[9].toDouble(),
+      batt: d[12] / 10.0,
+      speed: d[13].toDouble(),
+      inj: ((d[14] << 8) | d[15]) / 250.0,
+      ign: (d[16] - 128.0) / 2.0,
+      ltft: d[17] / 128.255,
+    );
+  }
+
+  Live? _dec17(List<int> d) {
+    if (d.length < 16) return null;
+    final tV = d[4] * 5.0 / 255.0;
+    final tC = _t(d[5]);
+    final rawInj = (d[11] << 8) | d[12];
+    final isWave = profile == 0;
+    return Live(
+      rpm: ((d[0] << 8) | d[1]).toDouble(),
+      tpsV: d[2] * 5.0 / 255.0,
+      tps: d[3] * 0.5,
+      ect: isWave ? null : tC,
+      ectV: isWave ? null : tV,
+      eot: isWave ? tC : null,
+      eotV: isWave ? tV : null,
+      batt: d[10] * 0.1,
+      inj: profile == 1 ? rawInj / 250.0 : rawInj * 0.003921,
+      ign: (d[13] - 128.0) * 0.5,
+      ltft: d.length > 14 ? d[14] / 128.255 : null,
+      speed: (!isWave && d.length > 15 && d[15] != 0xFF) ? d[15].toDouble() : null,
+    );
+  }
+}
+
+class Live {
+  final double? rpm, tps, tpsV, ect, ectV, eot, eotV, iat, map, batt, inj, ign, speed, ltft;
+  Live({this.rpm, this.tps, this.tpsV, this.ect, this.ectV, this.eot, this.eotV, this.iat, this.map, this.batt, this.inj, this.ign, this.speed, this.ltft});
 }
