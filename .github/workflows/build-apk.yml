@@ -81,10 +81,29 @@ jobs:
               <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
               <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
               <uses-feature android:name="android.hardware.bluetooth_le" android:required="true"/>
+              <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
           '''
           s = re.sub(r'(<manifest[^>]*>)', r'\1' + perms, s, count=1)
           s = re.sub(r'android:label="[^"]*"', 'android:label="TIWSHOP"', s, count=1)
+          # แจ้งแอพเมื่อเสียบสาย USB (จูนผ่านสาย)
+          intent = '''
+                  <intent-filter>
+                      <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"/>
+                  </intent-filter>
+                  <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/device_filter"/>
+          '''
+          s = re.sub(r'(</intent-filter>)', r'\1' + intent, s, count=1)
           open(p, "w", encoding="utf-8").write(s)
+          import os
+          xml = os.path.join(os.path.dirname(p), 'res', 'xml')
+          os.makedirs(xml, exist_ok=True)
+          open(os.path.join(xml, 'device_filter.xml'), 'w', encoding='utf-8').write(
+              '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
+              '  <usb-device vendor-id="1027"/>\n'
+              '  <usb-device vendor-id="6790"/>\n'
+              '  <usb-device vendor-id="4292"/>\n'
+              '  <usb-device vendor-id="1659"/>\n'
+              '</resources>\n')
           PY
 
       # แก้ error: ไลบรารีบางตัวคอมไพล์กับ android-33 แต่ dependency ต้องการ 34+

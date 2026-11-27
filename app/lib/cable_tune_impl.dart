@@ -1,0 +1,378 @@
+// จูนผ่านสาย USB -> ECU (Android) : ต่อสาย FTDI/CH340 เข้าวงจร K-Line แล้วอ่าน/จูน ECU โดยตรง
+import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import 'package:usb_serial_next/usb_serial_next.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'kline.dart';
+import 'ecu_db.dart';
+import 'tune.dart';
+
+const _bg = Color(0xFF0E1116);
+const _card = Color(0xFF171C24);
+const _cyan = Color(0xFF18D8FF);
+const _green = Color(0xFF34D27B);
+const _amber = Color(0xFFFFC53A);
+const _mut = Color(0xFF8A97A6);
+
+class CableTunePage extends StatefulWidget {
+  const CableTunePage({super.key});
+  @override
+  State<CableTunePage> createState() => _CableTunePageState();
+}
+
+class _CableTunePageState extends State<CableTunePage> {
+  UsbSerialPort? _port;
+  KLine? _kl;
+  StreamSubscription? _usbEv;
+  bool _busy = false;
+  bool _connected = false;
+  String status = 'ยังไม่ต่อสาย';
+  final List<String> _log = [];
+  Live? _liveCache;
+  Timer? _liveTimer;
+
+  void _say(String s) {
+    final t = TimeOfDay.now();
+    setState(() {
+      _log.insert(0, '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}  $s');
+      if (_log.length > 200) _log.removeLast();
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (UsbSerial.isSupported) {
+      _usbEv = UsbSerial.instance.deviceEvents.listen((e) {
+        if (e is UsbDeviceDetached && _connected) {
+          _say('ถอดสาย USB แล้ว');
+          _disconnect();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _usbEv?.cancel();
+    _stopLive();
+    _kl?.dispose();
+    _port?.close();
+    super.dispose();
+  }
+
+  Future<void> _connect() async {
+    if (!UsbSerial.isSupported) {
+      _say('เครื่องนี้ไม่รองรับ USB-OTG');
+      return;
+    }
+    await _disconnect();
+    final usb = UsbSerial.instance;
+    final devs = (await usb.listDevices()).where((d) => d.isSerial).toList();
+    if (devs.isEmpty) {
+      _say('ไม่พบสาย — เสียบ FTDI/CH340/CP210x ผ่าน OTG แล้วลองใหม่');
+      return;
+    }
+    final d = devs.first;
+    final name = 'USB ${d.vendorId.toRadixString(16)}:${d.productId.toRadixString(16)}';
+    try {
+      final port = await usb.open(d, config: const SerialConfig(baudRate: 10400, dtr: true, rts: true));
+      _port = port;
+      _kl = KLine(port);
+      setState(() {
+        _connected = true;
+        status = 'ต่อสายแล้ว: $name';
+      });
+      _say('เปิดพอร์ต 10400 8N1 — กด "อ่าน ECM ID" เพื่อต่อ ECU');
+    } on SerialException catch (e) {
+      _say(e.error == SerialError.permissionDenied ? 'ยังไม่ได้อนุญาต — กดอนุญาตแล้วลองใหม่' : 'เปิดพอร์ตไม่สำเร็จ: ${e.message}');
+    }
+  }
+
+  Future<void> _readId() async {
+    final kl = _kl;
+    if (kl == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      _say('เริ่มเชื่อมต่อ ECU (init)…');
+      if (!await kl.init()) {
+        _say('ต่อ ECU ไม่สำเร็จ — เช็กวงจร K-Line / ไฟ 12V / การต่อสาย');
+        return;
+      }
+      _say('init สำเร็จ · กำลังอ่าน ECM ID…');
+      final id = await kl.readEcuId();
+      if (id == null) {
+        _say('อ่าน ECM ID ไม่ได้');
+        return;
+      }
+      final hex = id.map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase()).join(' ');
+      _say('ECM ID: $hex');
+      final model = ecuModelFromId(id);
+      kl.profile = KLine.profileFromName(model ?? '');
+      _say(model != null ? '✓ รุ่น: $model' : 'รุ่น: ยังไม่รู้จัก');
+    } catch (e) {
+      _say('ผิดพลาด: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _startLive() async {
+    final kl = _kl;
+    if (kl == null) return;
+    try { await kl.pickEngineTable(); } catch (_) {}
+    _liveTimer?.cancel();
+    _liveTimer = Timer.periodic(const Duration(milliseconds: 300), (_) async {
+      try {
+        final lv = await kl.readEngine();
+        if (lv != null) _liveCache = lv;
+      } catch (_) {}
+    });
+  }
+
+  void _stopLive() {
+    _liveTimer?.cancel();
+    _liveTimer = null;
+  }
+
+  Future<void> _openLive() async {
+    final kl = _kl;
+    if (kl == null) return;
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => _CableLivePage(kl)));
+  }
+
+  Future<void> _saveBin(String name, Uint8List bytes) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final safe = name.toLowerCase().endsWith('.bin') ? name : '$name.bin';
+      final f = File('${dir.path}/$safe');
+      await f.writeAsBytes(bytes);
+      _say('บันทึก BIN ที่แก้แล้ว: ${f.path}');
+    } catch (e) {
+      _say('บันทึกไม่สำเร็จ: $e');
+    }
+  }
+
+  Future<void> _openTune() async {
+    final binRes = await FilePicker.platform.pickFiles(withData: true, dialogTitle: 'เลือกไฟล์ BIN');
+    if (binRes == null || binRes.files.isEmpty) return;
+    final bf = binRes.files.first;
+    final bin = bf.bytes;
+    if (bin == null) {
+      _say('อ่านไฟล์ BIN ไม่ได้');
+      return;
+    }
+    final xdfRes = await FilePicker.platform.pickFiles(withData: true, dialogTitle: 'เลือกไฟล์ XDF');
+    if (xdfRes == null || xdfRes.files.isEmpty) {
+      _say('ยังไม่ได้เลือก XDF');
+      return;
+    }
+    final xb = xdfRes.files.first.bytes;
+    if (xb == null) {
+      _say('อ่านไฟล์ XDF ไม่ได้');
+      return;
+    }
+    final doc = XdfDoc.parse(String.fromCharCodes(xb));
+    if (doc.items.isEmpty) {
+      _say('XDF นี้ไม่มีพารามิเตอร์ หรือเป็นแบบเข้ารหัส');
+      return;
+    }
+    if (!mounted) return;
+    final cable = _connected;
+    if (cable) await _startLive();
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => TunePage(
+          fileName: bf.name,
+          bin: Uint8List.fromList(bin),
+          xdf: doc,
+          getRpm: cable ? () => _liveCache?.rpm : null,
+          getTps: cable ? () => _liveCache?.tps : null,
+          onSave: (name, bytes) async => _saveBin(name, bytes),
+        )));
+    _stopLive();
+  }
+
+  Future<void> _disconnect() async {
+    _stopLive();
+    await _kl?.dispose();
+    _kl = null;
+    try { await _port?.close(); } catch (_) {}
+    _port = null;
+    if (mounted) {
+      setState(() {
+        _connected = false;
+        status = 'ยังไม่ต่อสาย';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _bg,
+      appBar: AppBar(
+        backgroundColor: _bg,
+        title: const Text('จูนผ่านสาย (USB → ECU)'),
+        actions: [
+          if (_connected)
+            TextButton.icon(onPressed: _disconnect, icon: const Icon(Icons.link_off, color: _amber, size: 18), label: const Text('ตัดสาย', style: TextStyle(color: _amber))),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12)),
+            child: Row(children: [
+              Icon(_connected ? Icons.check_circle : Icons.circle_outlined, color: _connected ? _green : _mut),
+              const SizedBox(width: 10),
+              Expanded(child: Text(status, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
+            ]),
+          ),
+          const SizedBox(height: 12),
+          if (!_connected)
+            SizedBox(height: 50, child: ElevatedButton.icon(
+              onPressed: _connect,
+              style: ElevatedButton.styleFrom(backgroundColor: _cyan, foregroundColor: Colors.black),
+              icon: const Icon(Icons.usb),
+              label: const Text('ต่อสาย USB', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            )),
+          if (_connected) ...[
+            SizedBox(height: 48, child: ElevatedButton.icon(
+              onPressed: _busy ? null : _readId,
+              style: ElevatedButton.styleFrom(backgroundColor: _cyan, foregroundColor: Colors.black),
+              icon: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)) : const Icon(Icons.memory),
+              label: Text(_busy ? 'กำลังอ่าน…' : 'อ่าน ECM ID / รู้จักรุ่น', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            )),
+            const SizedBox(height: 8),
+            SizedBox(height: 48, child: OutlinedButton.icon(
+              onPressed: _busy ? null : _openLive,
+              style: OutlinedButton.styleFrom(foregroundColor: _green, side: const BorderSide(color: _green)),
+              icon: const Icon(Icons.speed),
+              label: const Text('ดูค่าการทำงาน (Live)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            )),
+          ],
+          const SizedBox(height: 8),
+          SizedBox(height: 48, child: OutlinedButton.icon(
+            onPressed: _busy ? null : _openTune,
+            style: OutlinedButton.styleFrom(foregroundColor: _amber, side: const BorderSide(color: _amber)),
+            icon: const Icon(Icons.tune),
+            label: const Text('จูนไฟล์ (เปิด BIN + XDF)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          )),
+          const SizedBox(height: 14),
+          const Align(alignment: Alignment.centerLeft, child: Text('บันทึก', style: TextStyle(color: _mut, fontWeight: FontWeight.bold))),
+          const SizedBox(height: 6),
+          Expanded(child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white10)),
+            child: ListView.builder(
+              itemCount: _log.length,
+              itemBuilder: (_, i) => Padding(padding: const EdgeInsets.symmetric(vertical: 2), child: Text(_log[i], style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Color(0xFFBFD0DE)))),
+            ),
+          )),
+          const Text('ต้องมีวงจร K-Line (L9637D) คั่นระหว่างสาย FTDI กับ ECU · ไฟ 12V', style: TextStyle(color: _mut, fontSize: 11)),
+        ]),
+      ),
+    );
+  }
+}
+
+class _CableLivePage extends StatefulWidget {
+  final KLine kl;
+  const _CableLivePage(this.kl);
+  @override
+  State<_CableLivePage> createState() => _CableLivePageState();
+}
+
+class _CableLivePageState extends State<_CableLivePage> {
+  Timer? _timer;
+  Live? _live;
+  String _msg = 'กำลังเริ่ม…';
+  bool _poll = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  Future<void> _start() async {
+    setState(() => _msg = 'กำลังหาตารางข้อมูล…');
+    var t = await widget.kl.pickEngineTable();
+    if (t == null) {
+      setState(() => _msg = 'เชื่อมต่อ ECU ใหม่…');
+      if (await widget.kl.init()) t = await widget.kl.pickEngineTable();
+    }
+    if (t == null) {
+      if (mounted) setState(() => _msg = 'อ่านค่าไม่ได้ — เช็กการต่อ ECU');
+      return;
+    }
+    if (mounted) setState(() => _msg = 'ตาราง 0x${t!.toRadixString(16).toUpperCase()}');
+    _timer = Timer.periodic(const Duration(milliseconds: 250), (_) async {
+      if (_poll) return;
+      _poll = true;
+      try {
+        final lv = await widget.kl.readEngine();
+        if (lv != null && mounted) setState(() => _live = lv);
+      } catch (_) {}
+      _poll = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _f(double? v, int dp, [String suf = '']) => v == null ? '—' : '${v.toStringAsFixed(dp)}$suf';
+
+  @override
+  Widget build(BuildContext context) {
+    final lv = _live;
+    final tiles = <List<String>>[
+      ['รอบเครื่อง', _f(lv?.rpm, 0), 'rpm'],
+      ['TPS', _f(lv?.tps, 1, '%'), _f(lv?.tpsV, 2, ' V')],
+      ['อุณหภูมิ', _f(lv?.ect ?? lv?.eot, 1, '°C'), lv?.eot != null ? 'น้ำมันเครื่อง' : 'น้ำ/เครื่อง'],
+      ['IAT อากาศ', _f(lv?.iat, 1, '°C'), ''],
+      ['MAP', _f(lv?.map, 0), ''],
+      ['แบตเตอรี่', _f(lv?.batt, 1, ' V'), ''],
+      ['หัวฉีด', _f(lv?.inj, 2, ' ms'), ''],
+      ['องศาไฟ', _f(lv?.ign, 1, '°'), ''],
+      ['ความเร็ว', _f(lv?.speed, 0, ' กม/ชม'), ''],
+      ['LTFT', _f(lv?.ltft, 2), ''],
+    ];
+    return Scaffold(
+      backgroundColor: _bg,
+      appBar: AppBar(backgroundColor: _bg, title: const Text('ค่าการทำงาน'), actions: [
+        Padding(padding: const EdgeInsets.only(right: 12), child: Center(child: Text(_msg, style: const TextStyle(color: _mut, fontSize: 12)))),
+      ]),
+      body: Padding(
+        padding: const EdgeInsets.all(12),
+        child: GridView.count(
+          crossAxisCount: 2,
+          childAspectRatio: 1.7,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          children: [
+            for (final t in tiles)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Text(t[0], style: const TextStyle(color: _mut, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text(t[1], style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _cyan)),
+                  if (t[2].isNotEmpty) Text(t[2], style: const TextStyle(color: _mut, fontSize: 11)),
+                ]),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

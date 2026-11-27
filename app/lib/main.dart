@@ -12,6 +12,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'ecu_db.dart';
 import 'tune.dart';
+import 'cable_tune.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart' show getApplicationDocumentsDirectory;
@@ -1895,6 +1896,10 @@ class _GaugePageState extends State<GaugePage> {
                 _btn('DEMO', c.toggleDemo, th, active: c.demo),
                 const SizedBox(width: 6),
                 _btn('FLASH ECU', () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FlashPage(c: c))), th),
+                if (!kIsWeb) ...[
+                  const SizedBox(width: 6),
+                  _btn('CABLE', () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CableTunePage())), th),
+                ],
                 const SizedBox(width: 6),
                 _iconBtn(Icons.settings, th, () {
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => SettingsPage(c: c)));
