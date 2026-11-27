@@ -404,6 +404,12 @@ class GaugeController extends ChangeNotifier {
 
   Telemetry t = Telemetry();
   LinkState link = LinkState.idle;
+  // ---- โหมดเชื่อมต่อผ่านสาย USB (ป้อน Telemetry เหมือน BLE) ----
+  CableSession? _cable;
+  Timer? _cablePoll;
+  bool _cFlashing = false;
+  int _cFlashState = 0, _cFlashPct = 0;
+  bool get onCable => _cable != null;
   bool demo = false;
   bool gpsOk = false;
   String? gpsErr; // เว็บ: เหตุผลที่อ่าน GPS ไม่ได้ (โชว์บนจอให้ผู้ใช้รู้ว่าติดตรงไหน)
@@ -1161,8 +1167,73 @@ class GaugeController extends ChangeNotifier {
     if (_auto) _retryTimer = Timer(const Duration(seconds: 3), _scanAndConnect);
   }
 
+  // ===================== เชื่อมต่อผ่านสาย USB (ใช้งานเหมือนต่อ BLE ทุกอย่าง) =====================
+  Future<void> connectCable() async {
+    await disconnect(); // ยกเลิกการเชื่อมต่อเดิมก่อน
+    final s = makeCableSession();
+    if (s == null) { error = 'เครื่องนี้ไม่รองรับสาย USB'; notifyListeners(); return; }
+    link = LinkState.connecting; error = null; notifyListeners();
+    bool ok;
+    try { ok = await s.connect(); } catch (_) { ok = false; }
+    if (!ok) { await s.dispose(); link = LinkState.idle; error = 'ต่อ ECU ไม่ได้ — เช็กสาย/วงจร K-Line/ไฟ 12V'; notifyListeners(); return; }
+    _cable = s;
+    link = LinkState.connected;
+    _cFlashState = 0; _cFlashPct = 0;
+    t = _cableTel(null);
+    notifyListeners();
+    _cablePoll = Timer.periodic(const Duration(milliseconds: 220), (_) => _cableTick());
+  }
+
+  Future<void> _cableTick() async {
+    final s = _cable;
+    if (s == null || _cFlashing) return;
+    Map<String, double?>? m;
+    try { m = await s.readLive(); } catch (_) { m = null; }
+    if (_cable == null) return;
+    t = _cableTel(m);
+    notifyListeners();
+  }
+
+  Telemetry _cableTel(Map<String, double?>? m) => Telemetry(
+        fresh: m != null,
+        flashSup: true,
+        ecmId: _cable?.ecmIdHex,
+        flashState: _cFlashState, flashPct: _cFlashPct,
+        rpm: m?['rpm'], tps: m?['tps'], ect: m?['ect'], eot: m?['eot'],
+        iat: m?['iat'], map: m?['map'], batt: m?['batt'], inj: m?['inj'],
+        ign: m?['ign'], speed: m?['speed'], ltft: m?['ltft'],
+      );
+
+  // อัดไฟล์ผ่านสาย (เรียกจากหน้า FLASH เมื่อ onCable) — ความคืบหน้าป้อนเข้า t เหมือนอัดผ่านเกจ
+  Future<String?> cableFlash(Uint8List bin, int vendor) async {
+    final s = _cable;
+    if (s == null) return 'ยังไม่ได้ต่อสาย';
+    _cFlashing = true;
+    _cFlashState = 1; _cFlashPct = 0;
+    t = _cableTel(null); notifyListeners();
+    bool ok;
+    try {
+      ok = await s.flash(bin, vendor, (st, pct) {
+        _cFlashState = st; _cFlashPct = pct;
+        t = _cableTel(null); notifyListeners();
+      }, (log) {});
+    } catch (_) { ok = false; }
+    _cFlashState = ok ? 6 : 7; _cFlashPct = ok ? 100 : 0;
+    t = _cableTel(null); notifyListeners();
+    _cFlashing = false;
+    return ok ? null : 'อัดไม่สำเร็จ (ดูสถานะด้านบน)';
+  }
+
   Future<void> disconnect() async {
     _auto = false;
+    _cablePoll?.cancel();
+    _cablePoll = null;
+    if (_cable != null) {
+      final c = _cable;
+      _cable = null;
+      _cFlashing = false;
+      try { await c?.dispose(); } catch (_) {}
+    }
     _retryTimer?.cancel();
     await _dataSub?.cancel();
     await _connSub?.cancel();
@@ -1896,9 +1967,9 @@ class _GaugePageState extends State<GaugePage> {
                 _btn('DEMO', c.toggleDemo, th, active: c.demo),
                 const SizedBox(width: 6),
                 _btn('FLASH ECU', () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => FlashPage(c: c))), th),
-                if (!kIsWeb) ...[
+                if (!kIsWeb && cableSupported) ...[
                   const SizedBox(width: 6),
-                  _btn('CABLE', () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CableTunePage())), th),
+                  _btn('CABLE', () => c.onCable ? c.disconnect() : c.connectCable(), th, active: c.onCable),
                 ],
                 const SizedBox(width: 6),
                 _iconBtn(Icons.settings, th, () {

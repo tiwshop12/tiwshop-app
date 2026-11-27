@@ -13,6 +13,80 @@ import 'flash_engine.dart';
 
 const bool cableSupported = true;
 
+// ---------- โหมดเชื่อมต่อผ่านสาย (ให้ทั้งแอพใช้เหมือน BLE) ----------
+abstract class CableSession {
+  Future<bool> connect();
+  String? get ecmIdHex;
+  Future<Map<String, double?>?> readLive();
+  Future<bool> flash(Uint8List bin, int vendorReq, void Function(int state, int pct) onProgress, void Function(String msg) onLog);
+  Future<void> dispose();
+}
+
+CableSession? makeCableSession() => UsbSerial.isSupported ? _CableSessionImpl() : null;
+
+class _CableSessionImpl implements CableSession {
+  UsbSerialPort? _port;
+  KLine? _kl;
+  final List<int> _ecm = [];
+
+  @override
+  String? get ecmIdHex => _ecm.length >= 5 ? _ecm.take(5).map((b) => b.toRadixString(16).padLeft(2, '0')).join().toUpperCase() : null;
+
+  @override
+  Future<bool> connect() async {
+    final usb = UsbSerial.instance;
+    final devs = (await usb.listDevices()).where((d) => d.isSerial).toList();
+    if (devs.isEmpty) return false;
+    try {
+      _port = await usb.open(devs.first, config: const SerialConfig(baudRate: 10400, dtr: true, rts: true));
+    } catch (_) {
+      return false;
+    }
+    final kl = KLine(_port!);
+    _kl = kl;
+    if (!await kl.init()) return false;
+    final id = await kl.readEcuId();
+    if (id != null) {
+      _ecm
+        ..clear()
+        ..addAll(id);
+      kl.profile = KLine.profileFromName(ecuModelFromId(id) ?? '');
+    }
+    await kl.pickEngineTable();
+    return true;
+  }
+
+  @override
+  Future<Map<String, double?>?> readLive() async {
+    final kl = _kl;
+    if (kl == null) return null;
+    final lv = await kl.readEngine();
+    if (lv == null) return null;
+    return {
+      'rpm': lv.rpm, 'tps': lv.tps, 'ect': lv.ect ?? lv.eot, 'eot': lv.eot,
+      'iat': lv.iat, 'map': lv.map, 'batt': lv.batt, 'inj': lv.inj,
+      'ign': lv.ign, 'speed': lv.speed, 'ltft': lv.ltft,
+    };
+  }
+
+  @override
+  Future<bool> flash(Uint8List bin, int vendorReq, void Function(int, int) onProgress, void Function(String) onLog) async {
+    final kl = _kl;
+    if (kl == null) return false;
+    final eng = FlashEngine(kl, bin, onProgress: onProgress, onLog: onLog);
+    final res = await eng.run(vendorReq: vendorReq);
+    return res.ok;
+  }
+
+  @override
+  Future<void> dispose() async {
+    await _kl?.dispose();
+    _kl = null;
+    try { await _port?.close(); } catch (_) {}
+    _port = null;
+  }
+}
+
 String _failMsg(int code) {
   switch (code) {
     case 1: return 'ไฟล์ไม่ถูกต้อง/เล็กเกินไป';

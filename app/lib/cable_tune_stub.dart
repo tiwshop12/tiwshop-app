@@ -4,6 +4,16 @@ import 'package:flutter/material.dart';
 
 const bool cableSupported = false;
 
+abstract class CableSession {
+  Future<bool> connect();
+  String? get ecmIdHex;
+  Future<Map<String, double?>?> readLive();
+  Future<bool> flash(Uint8List bin, int vendorReq, void Function(int state, int pct) onProgress, void Function(String msg) onLog);
+  Future<void> dispose();
+}
+
+CableSession? makeCableSession() => null;
+
 Future<bool> runCableFlash(BuildContext context, Uint8List bin, String fileName, int vendorReq) async {
   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('อัดผ่านสาย USB ใช้ได้เฉพาะแอป Android')));
   return false;
