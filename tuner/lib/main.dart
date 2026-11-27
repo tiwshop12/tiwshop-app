@@ -3,15 +3,12 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:usb_serial/usb_serial.dart';
+import 'package:usb_serial_next/usb_serial_next.dart';
 
 // GATT ของเกจ TIWSHOP (ตรงกับเฟิร์มแวร์)
 const _suffix = '-5a41-5201-9c11-2a52a1c0de01';
 final Guid kGaugeSvc = Guid('7a0f0001$_suffix');
-final Guid kGaugeData = Guid('7a0f0002$_suffix');
-final Guid kGaugeCmd = Guid('7a0f0003$_suffix');
 
 const kBg = Color(0xFF0E1116);
 const kCard = Color(0xFF171C24);
@@ -53,9 +50,9 @@ class _HomePageState extends State<HomePage> {
   String status = 'ยังไม่เชื่อมต่อ';
 
   // USB
-  UsbPort? _port;
+  UsbSerialPort? _port;
   StreamSubscription<Uint8List>? _usbRx;
-  StreamSubscription<UsbEvent>? _usbEv;
+  StreamSubscription? _usbEv;
 
   // BLE
   BluetoothDevice? _dev;
@@ -75,14 +72,18 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _usbEv = UsbSerial.usbEventStream?.listen((e) {
-      if (e.event == UsbEvent.ACTION_USB_DETACHED && link == Link.usb) {
-        _say('ถอดสาย USB แล้ว');
-        _disconnect();
-      } else if (e.event == UsbEvent.ACTION_USB_ATTACHED) {
-        _say('เสียบสาย USB');
-      }
-    });
+    if (UsbSerial.isSupported) {
+      _usbEv = UsbSerial.instance.deviceEvents.listen((event) {
+        if (event is UsbDeviceDetached) {
+          if (link == Link.usb) {
+            _say('ถอดสาย USB แล้ว');
+            _disconnect();
+          }
+        } else if (event is UsbDeviceAttached) {
+          _say('เสียบสาย USB');
+        }
+      });
+    }
   }
 
   @override
@@ -94,40 +95,52 @@ class _HomePageState extends State<HomePage> {
 
   // ---------- USB (จูนผ่านสาย ตรงเข้า ECU) ----------
   Future<void> _connectUsb() async {
-    await _disconnect();
-    final devs = await UsbSerial.listDevices();
-    if (devs.isEmpty) {
-      _say('ไม่พบสาย USB — เสียบสาย FTDI/CH340 แล้วลองใหม่ (ต้องรองรับ USB-OTG)');
+    if (!UsbSerial.isSupported) {
+      _say('เครื่องนี้ไม่รองรับ USB-OTG');
       return;
     }
-    // เลือกตัวแรก (ปกติมีเส้นเดียว) — ถ้ามีหลายตัวให้ผู้ใช้เลือก
+    await _disconnect();
+    final usb = UsbSerial.instance;
+    final all = await usb.listDevices();
+    final devs = all.where((d) => d.isSerial).toList();
+    if (devs.isEmpty) {
+      _say('ไม่พบสาย USB — เสียบสาย FTDI/CH340/CP210x แล้วลองใหม่ (ต้องรองรับ USB-OTG)');
+      return;
+    }
     final d = devs.length == 1 ? devs.first : await _pickUsb(devs);
     if (d == null) return;
-    _say('พบ: ${d.productName ?? d.deviceName}  (VID ${d.vid?.toRadixString(16)} PID ${d.pid?.toRadixString(16)})');
-    final port = await d.create();
-    if (port == null || !(await port.open())) {
-      _say('เปิดพอร์ตไม่สำเร็จ — กด "อนุญาต" ตอน Android ถาม แล้วลองใหม่');
-      return;
+    final name = 'USB ${d.vendorId.toRadixString(16)}:${d.productId.toRadixString(16)}';
+    _say('พบ: $name${d.serialNumber != null ? '  S/N ${d.serialNumber}' : ''}');
+    try {
+      // K-Line เริ่มที่ 10400 8N1 (ภายหลังจูนจริงจะมีสลับความเร็ว)
+      final port = await usb.open(
+        d,
+        config: const SerialConfig(baudRate: 10400, dtr: true, rts: true),
+      );
+      _port = port;
+      _rxBytes = 0;
+      _usbRx = port.input.listen((data) {
+        _rxBytes += data.length;
+        setState(() {});
+      }, onError: (Object e) {
+        _say('สาย USB ขัดข้อง: $e');
+      });
+      setState(() {
+        link = Link.usb;
+        status = 'ต่อสายแล้ว: $name';
+      });
+      _say('เปิดพอร์ต 10400 8N1 สำเร็จ — พร้อมต่อขั้นต่อไป (อ่าน ECM ID)');
+    } on SerialException catch (e) {
+      if (e.error == SerialError.permissionDenied) {
+        _say('ยังไม่ได้อนุญาต — กด "อนุญาต/OK" ตอน Android ถาม แล้วลองใหม่');
+      } else {
+        _say('เปิดพอร์ตไม่สำเร็จ: ${e.message}');
+      }
     }
-    await port.setDTR(true);
-    await port.setRTS(true);
-    // K-Line เริ่มที่ 10400 8N1 (ภายหลังจูนจริงจะมีสลับความเร็ว)
-    await port.setPortParameters(10400, UsbPort.DATABITS_8, UsbPort.STOPBITS_1, UsbPort.PARITY_NONE);
-    _port = port;
-    _rxBytes = 0;
-    _usbRx = port.inputStream?.listen((data) {
-      _rxBytes += data.length;
-      setState(() {});
-    });
-    setState(() {
-      link = Link.usb;
-      status = 'ต่อสายแล้ว: ${d.productName ?? d.deviceName}';
-    });
-    _say('เปิดพอร์ต 10400 8N1 สำเร็จ — พร้อมต่อขั้นต่อไป (อ่าน ECM ID)');
   }
 
-  Future<UsbDevice?> _pickUsb(List<UsbDevice> devs) {
-    return showModalBottomSheet<UsbDevice>(
+  Future<dynamic> _pickUsb(List devs) {
+    return showModalBottomSheet<dynamic>(
       context: context,
       backgroundColor: kCard,
       builder: (_) => SafeArea(
@@ -136,8 +149,8 @@ class _HomePageState extends State<HomePage> {
           for (final d in devs)
             ListTile(
               leading: const Icon(Icons.usb, color: kCyan),
-              title: Text(d.productName ?? d.deviceName),
-              subtitle: Text('VID ${d.vid?.toRadixString(16)} · PID ${d.pid?.toRadixString(16)}'),
+              title: Text('USB ${d.vendorId.toRadixString(16)}:${d.productId.toRadixString(16)}'),
+              subtitle: d.serialNumber != null ? Text('S/N ${d.serialNumber}') : null,
               onTap: () => Navigator.pop(context, d),
             ),
         ]),
@@ -171,11 +184,13 @@ class _HomePageState extends State<HomePage> {
     final dev = await done.future.timeout(const Duration(seconds: 11), onTimeout: () => null);
     await FlutterBluePlus.stopScan();
     await _scanSub?.cancel();
+    _scanSub = null;
     if (dev == null) {
       _say('ไม่พบเกจ — เปิดเกจแล้วลองใหม่');
       return;
     }
-    _say('พบเกจ: ${dev.platformName.isEmpty ? dev.remoteId.str : dev.platformName}');
+    final nm = dev.platformName.isEmpty ? dev.remoteId.str : dev.platformName;
+    _say('พบเกจ: $nm');
     try {
       await dev.connect(timeout: const Duration(seconds: 10));
       await dev.discoverServices();
@@ -188,7 +203,7 @@ class _HomePageState extends State<HomePage> {
       });
       setState(() {
         link = Link.ble;
-        status = 'ต่อเกจแล้ว: ${dev.platformName.isEmpty ? dev.remoteId.str : dev.platformName}';
+        status = 'ต่อเกจแล้ว: $nm';
       });
       _say('เชื่อมต่อเกจสำเร็จ');
     } catch (e) {
@@ -241,7 +256,6 @@ class _HomePageState extends State<HomePage> {
       body: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          // สถานะ
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(color: kCard, borderRadius: BorderRadius.circular(12)),
@@ -253,7 +267,6 @@ class _HomePageState extends State<HomePage> {
             ]),
           ),
           const SizedBox(height: 14),
-          // ปุ่มเชื่อมต่อ
           Row(children: [
             Expanded(child: _connectCard(
               icon: Icons.usb, color: kCyan, title: 'จูนผ่านสาย', sub: 'USB → ECU ตรง',
