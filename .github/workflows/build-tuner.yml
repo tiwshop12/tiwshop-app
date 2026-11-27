@@ -1,0 +1,139 @@
+name: Build TUNER APK
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'tuner/**'
+      - '.github/workflows/build-tuner.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tuner
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-tuner-${{ runner.os }}-${{ hashFiles('tuner/pubspec.yaml') }}
+          restore-keys: gradle-tuner-${{ runner.os }}-
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android scaffold
+        run: |
+          cp pubspec.yaml /tmp/pubspec_t.yaml
+          cp lib/main.dart /tmp/main_t.dart
+          # แพ็กเกจ com.ftp.tuner — แยกจากแอพเกจ (com.ftp.gauge) ติดตั้งคู่กันได้
+          flutter create . --platforms=android --project-name tuner --org com.ftp
+          cp /tmp/pubspec_t.yaml pubspec.yaml
+          cp /tmp/main_t.dart lib/main.dart
+
+      - name: Pre-download Gradle (retry)
+        run: |
+          P=android/gradle/wrapper/gradle-wrapper.properties
+          URL=$(grep '^distributionUrl' "$P" | cut -d= -f2- | sed 's#\\:#:#g')
+          F=$(basename "$URL")
+          for i in 1 2 3; do
+            curl -fsSL "$URL" -o "/tmp/$F" && break
+            echo "โหลด gradle ล้ม (รอบ $i)"; sleep 20
+          done
+          sed -i "s#^distributionUrl=.*#distributionUrl=file\\:///tmp/$F#" "$P"
+
+      - name: Add BLE + USB host permissions + app name
+        run: |
+          M=android/app/src/main/AndroidManifest.xml
+          python3 - "$M" <<'PY'
+          import sys, re
+          p = sys.argv[1]
+          s = open(p, encoding="utf-8").read()
+          perms = '''
+              <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
+              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+              <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
+              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+              <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
+              <uses-feature android:name="android.hardware.usb.host" android:required="false"/>
+          '''
+          s = re.sub(r'(<manifest[^>]*>)', r'\1' + perms, s, count=1)
+          s = re.sub(r'android:label="[^"]*"', 'android:label="TIWSHOP TUNER"', s, count=1)
+          # แจ้งเตือนเมื่อเสียบสาย USB (ให้แอพรับรู้อุปกรณ์)
+          intent = '''
+                  <intent-filter>
+                      <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"/>
+                  </intent-filter>
+                  <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/device_filter"/>
+          '''
+          s = re.sub(r'(</intent-filter>)', r'\1' + intent, s, count=1)
+          open(p, "w", encoding="utf-8").write(s)
+          # device_filter.xml (ยอมรับทุกอุปกรณ์ USB-serial ที่มี)
+          import os
+          xml = os.path.join(os.path.dirname(p), 'res', 'xml')
+          os.makedirs(xml, exist_ok=True)
+          open(os.path.join(xml, 'device_filter.xml'), 'w', encoding='utf-8').write(
+              '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
+              '  <usb-device vendor-id="1027"/>\n'   # FTDI
+              '  <usb-device vendor-id="6790"/>\n'   # CH340 (QinHeng)
+              '  <usb-device vendor-id="4292"/>\n'   # CP210x (Silicon Labs)
+              '  <usb-device vendor-id="1659"/>\n'   # PL2303 (Prolific)
+              '</resources>\n')
+          PY
+
+      - name: Force compileSdk 36 for plugin modules + disable lintVital
+        run: |
+          mkdir -p ~/.gradle
+          cat > ~/.gradle/init.gradle <<'EOG'
+          allprojects {
+            afterEvaluate { p ->
+              if (p.plugins.hasPlugin('com.android.library')) {
+                p.android.compileSdkVersion 36
+              }
+            }
+            tasks.configureEach { t ->
+              if (t.name.toLowerCase().startsWith('lint')) { t.enabled = false }
+            }
+          }
+          EOG
+
+      - run: flutter pub get
+
+      - name: Build APK
+        run: |
+          for i in 1 2 3; do
+            flutter build apk --release && exit 0
+            echo "build ล้ม (รอบ $i) รอ 30 วินาทีแล้วลองใหม่"; sleep 30
+          done
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TIWSHOP-TUNER-apk
+          path: tuner/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Publish TUNER APK to Releases
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk /tmp/TIWSHOP_TUNER.apk
+          V=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          TAG="tuner-v${V}-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" /tmp/TIWSHOP_TUNER.apk --repo "$GITHUB_REPOSITORY" --title "TIWSHOP TUNER $TAG" --notes "TUNER APK (จูนผ่านสาย) รอบที่ ${GITHUB_RUN_NUMBER}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

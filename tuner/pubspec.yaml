@@ -1,0 +1,21 @@
+name: tuner
+description: TIWSHOP TUNER - จูน ECU ผ่านสาย USB และเชื่อมต่อเกจผ่านบลูทูธ
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_blue_plus: ^1.32.12
+  usb_serial: ^0.5.2
+  shared_preferences: ^2.2.3
+  permission_handler: ^11.3.1
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
