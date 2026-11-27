@@ -682,6 +682,34 @@ class _FlashPageState extends State<FlashPage> {
                 ),
               ),
             ),
+            // อัดผ่านสาย USB -> ECU โดยตรง (ไม่ต้องผ่านเกจ) — เฉพาะ Android
+            if (!kIsWeb && cableSupported) ...[
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: (sel != null && !busy)
+                    ? () async {
+                        final s = sel!;
+                        final bytes = await s.load();
+                        if (!mounted) return;
+                        await runCableFlash(context, bytes, s.name, vendor);
+                      }
+                    : null,
+                borderRadius: BorderRadius.circular(10),
+                child: Opacity(
+                  opacity: (sel != null && !busy) ? 1 : 0.45,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.black45,
+                      border: Border.all(color: kAmber, width: 1.4),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text('อัดผ่านสาย USB → ECU', style: TextStyle(color: kAmber, fontSize: 14, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             // ความคืบหน้า: ส่งไฟล์ (0-100) -> เขียนกล่อง (flashPct)
             if (sending || active || done || fail) ...[

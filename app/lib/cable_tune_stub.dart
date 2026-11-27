@@ -1,5 +1,13 @@
 // จูนผ่านสาย — สตับสำหรับเว็บ (เบราว์เซอร์ต่อสาย USB เข้า ECU ไม่ได้)
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+
+const bool cableSupported = false;
+
+Future<bool> runCableFlash(BuildContext context, Uint8List bin, String fileName, int vendorReq) async {
+  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('อัดผ่านสาย USB ใช้ได้เฉพาะแอป Android')));
+  return false;
+}
 
 class CableTunePage extends StatelessWidget {
   const CableTunePage({super.key});

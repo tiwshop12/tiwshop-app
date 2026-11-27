@@ -118,6 +118,30 @@ class KLine {
     return s[0] == 0x02 && s[1] == 0x04 && s[2] == 0x00 && s[3] == _cs(s, 3);
   }
 
+  void flush() => _flush();
+
+  // ===================== คำสั่งสำหรับโปรแกรมอัด (flash) =====================
+  // ส่งเฟรม (รวม checksum ท้ายแล้ว) -> กลืน echo -> อ่านคำตอบ [b0][len][..][cs]  (cs = cs8Honda)
+  // คืนคำตอบทั้งเฟรม (g_rb) หรือ null ถ้าไม่ตอบ/checksum ผิด
+  Future<List<int>?> flCmd(List<int> frame, {int sleepMs = 0}) async {
+    await _send(frame);
+    if (sleepMs > 0) await Future.delayed(Duration(milliseconds: sleepMs));
+    int to = 60 + 2 * frame.length;
+    if (to < 250) to = 250;
+    final b0 = await _readByte(to);
+    if (b0 == null) return null;
+    final len = await _readByte(200);
+    if (len == null || len < 4 || len > 160) return null;
+    final r = <int>[b0, len];
+    for (int i = 2; i < len; i++) {
+      final b = await _readByte(200);
+      if (b == null) return null;
+      r.add(b);
+    }
+    if (r[len - 1] != _cs(r, len - 1)) return null;
+    return r;
+  }
+
   // อ่าน ECM ID (ตาราง 0x00, 5 ไบต์แรก) ลองซ้ำ 3 ครั้ง
   Future<List<int>?> readEcuId() async {
     for (int a = 0; a < 3; a++) {

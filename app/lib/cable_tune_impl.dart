@@ -9,6 +9,123 @@ import 'package:path_provider/path_provider.dart';
 import 'kline.dart';
 import 'ecu_models.dart';
 import 'tune.dart';
+import 'flash_engine.dart';
+
+const bool cableSupported = true;
+
+String _failMsg(int code) {
+  switch (code) {
+    case 1: return 'ไฟล์ไม่ถูกต้อง/เล็กเกินไป';
+    case 2: return 'ต่อกล่อง ECU ไม่ได้ (เช็กสาย/วงจร K-Line/ไฟ 12V)';
+    case 5: return 'ปลดล็อค/ลบข้อมูลไม่สำเร็จ';
+    case 6: return 'เขียนข้อมูลไม่สำเร็จ (กล่องอาจค้าง — ลองอัดซ้ำ)';
+    case 7: return 'ชนิดกล่องไม่ตรงกับไฟล์';
+    case 8: return 'ไฟล์ไม่ใช่ของกล่องรุ่นนี้ (checksum เกินขนาดไฟล์)';
+    default: return 'ผิดพลาด';
+  }
+}
+
+// อัดไฟล์เข้า ECU ผ่านสาย USB โดยตรง (เรียกจากหน้า FLASH ECU)
+Future<bool> runCableFlash(BuildContext context, Uint8List bin, String fileName, int vendorReq) async {
+  if (!UsbSerial.isSupported) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('เครื่องนี้ไม่รองรับ USB-OTG')));
+    return false;
+  }
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      backgroundColor: _card,
+      title: const Text('อัดผ่านสาย USB', style: TextStyle(color: _amber)),
+      content: Text(
+        'ไฟล์: $fileName\n\n'
+        '• ต้องมีวงจร K-Line (L9637D) + ไฟ 12V เข้ากล่อง\n'
+        '• ห้ามถอดสาย/ดับกุญแจระหว่างอัด\n'
+        '• ทดสอบกับกล่องสำรองก่อนใช้จริง เขียนพลาดกล่องพังถาวรได้\n\n'
+        'ยืนยันเริ่มอัด?',
+        style: const TextStyle(fontSize: 13),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ยกเลิก')),
+        ElevatedButton(onPressed: () => Navigator.pop(context, true), style: ElevatedButton.styleFrom(backgroundColor: _amber, foregroundColor: Colors.black), child: const Text('เริ่มอัด')),
+      ],
+    ),
+  );
+  if (go != true) return false;
+
+  final usb = UsbSerial.instance;
+  final devs = (await usb.listDevices()).where((d) => d.isSerial).toList();
+  if (devs.isEmpty) {
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ไม่พบสาย USB — เสียบ FTDI/CH340 ผ่าน OTG')));
+    return false;
+  }
+  UsbSerialPort port;
+  try {
+    port = await usb.open(devs.first, config: const SerialConfig(baudRate: 10400, dtr: true, rts: true));
+  } on SerialException catch (e) {
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.error == SerialError.permissionDenied ? 'ยังไม่ได้อนุญาต USB' : 'เปิดพอร์ตไม่ได้')));
+    return false;
+  }
+  final kl = KLine(port);
+  final prog = _FlashProgress();
+  final eng = FlashEngine(kl, bin, onProgress: prog.set, onLog: prog.log);
+  if (context.mounted) {
+    showDialog(context: context, barrierDismissible: false, builder: (_) => _FlashDialog(prog));
+  }
+  FlashResult res;
+  try {
+    res = await eng.run(vendorReq: vendorReq);
+  } catch (_) {
+    res = FlashResult(false, 99);
+  } finally {
+    await kl.dispose();
+    try { await port.close(); } catch (_) {}
+  }
+  if (context.mounted) Navigator.of(context, rootNavigator: true).pop(); // ปิด dialog progress
+  if (context.mounted) {
+    showDialog(context: context, builder: (_) => AlertDialog(
+      backgroundColor: _card,
+      title: Text(res.ok ? 'อัดสำเร็จ ✓' : 'อัดไม่สำเร็จ', style: TextStyle(color: res.ok ? _green : const Color(0xFFE23A3A))),
+      content: Text(res.ok ? 'เขียนไฟล์เข้ากล่องเรียบร้อย' : _failMsg(res.failCode), style: const TextStyle(fontSize: 14)),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('ตกลง'))],
+    ));
+  }
+  return res.ok;
+}
+
+class _FlashProgress extends ChangeNotifier {
+  int state = 0, pct = 0;
+  final List<String> logs = [];
+  void set(int s, int p) { state = s; pct = p; notifyListeners(); }
+  void log(String m) { logs.insert(0, m); notifyListeners(); }
+}
+
+const _flStateNames = ['รอ', 'เริ่มต้น', 'ปลดล็อค', 'ลบข้อมูล', 'กำลังเขียน', 'ตรวจสอบ/ปิดงาน', 'สำเร็จ', 'ล้มเหลว'];
+
+class _FlashDialog extends StatelessWidget {
+  final _FlashProgress prog;
+  const _FlashDialog(this.prog);
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: _card,
+      title: const Text('กำลังอัด…', style: TextStyle(color: _cyan)),
+      content: AnimatedBuilder(
+        animation: prog,
+        builder: (_, __) => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(_flStateNames[prog.state.clamp(0, 7)], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 10),
+          ClipRRect(borderRadius: BorderRadius.circular(6), child: LinearProgressIndicator(value: prog.pct / 100.0, minHeight: 10, backgroundColor: Colors.white12, color: _cyan)),
+          const SizedBox(height: 6),
+          Text('${prog.pct}%', style: const TextStyle(color: _mut)),
+          const SizedBox(height: 10),
+          SizedBox(height: 120, child: ListView(children: [for (final l in prog.logs) Text(l, style: const TextStyle(fontSize: 11, color: _mut))])),
+          const SizedBox(height: 8),
+          const Text('ห้ามถอดสาย / ดับกุญแจ', style: TextStyle(color: Color(0xFFE23A3A), fontSize: 12)),
+        ]),
+      ),
+    );
+  }
+}
 
 const _bg = Color(0xFF0E1116);
 const _card = Color(0xFF171C24);
