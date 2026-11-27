@@ -1,7 +1,7 @@
 name: tuner
 description: TIWSHOP TUNER - จูน ECU ผ่านสาย USB และเชื่อมต่อเกจผ่านบลูทูธ
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

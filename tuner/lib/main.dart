@@ -1,10 +1,11 @@
 // TIWSHOP TUNER — แอพช่าง: จูน ECU ผ่านสาย USB (ตรงเข้า ECU) และเชื่อมต่อเกจผ่านบลูทูธ
 // ขั้น 1: เชื่อมต่อ + พิสูจน์สาย/เกจ (อ่านอย่างเดียว ยังไม่เขียน ECU)
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:usb_serial_next/usb_serial_next.dart';
+import 'kline.dart';
+import 'ecu_db.dart';
 
 // GATT ของเกจ TIWSHOP (ตรงกับเฟิร์มแวร์)
 const _suffix = '-5a41-5201-9c11-2a52a1c0de01';
@@ -51,15 +52,14 @@ class _HomePageState extends State<HomePage> {
 
   // USB
   UsbSerialPort? _port;
-  StreamSubscription<Uint8List>? _usbRx;
+  KLine? _kl;
   StreamSubscription? _usbEv;
+  bool _busy = false;
 
   // BLE
   BluetoothDevice? _dev;
   StreamSubscription<List<ScanResult>>? _scanSub;
   StreamSubscription<BluetoothConnectionState>? _connSub;
-
-  int _rxBytes = 0;
 
   void _say(String s) {
     final t = TimeOfDay.now();
@@ -118,18 +118,12 @@ class _HomePageState extends State<HomePage> {
         config: const SerialConfig(baudRate: 10400, dtr: true, rts: true),
       );
       _port = port;
-      _rxBytes = 0;
-      _usbRx = port.input.listen((data) {
-        _rxBytes += data.length;
-        setState(() {});
-      }, onError: (Object e) {
-        _say('สาย USB ขัดข้อง: $e');
-      });
+      _kl = KLine(port);
       setState(() {
         link = Link.usb;
         status = 'ต่อสายแล้ว: $name';
       });
-      _say('เปิดพอร์ต 10400 8N1 สำเร็จ — พร้อมต่อขั้นต่อไป (อ่าน ECM ID)');
+      _say('เปิดพอร์ต 10400 8N1 สำเร็จ — กด "อ่าน ECM ID" เพื่อต่อ ECU');
     } on SerialException catch (e) {
       if (e.error == SerialError.permissionDenied) {
         _say('ยังไม่ได้อนุญาต — กด "อนุญาต/OK" ตอน Android ถาม แล้วลองใหม่');
@@ -211,9 +205,37 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _readId() async {
+    final kl = _kl;
+    if (kl == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      _say('เริ่มเชื่อมต่อ ECU (init)…');
+      final ok = await kl.init();
+      if (!ok) {
+        _say('ต่อ ECU ไม่สำเร็จ — เช็กวงจร K-Line / ไฟ 12V / การต่อสาย');
+        return;
+      }
+      _say('init สำเร็จ · กำลังอ่าน ECM ID…');
+      final id = await kl.readEcuId();
+      if (id == null) {
+        _say('อ่าน ECM ID ไม่ได้ (ลองใหม่อีกครั้ง)');
+        return;
+      }
+      final hex = id.map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase()).join(' ');
+      _say('ECM ID: $hex');
+      final model = ecuModelFromId(id);
+      _say(model != null ? '✓ รุ่น: $model' : 'รุ่น: ยังไม่รู้จัก (ไม่มีในฐานข้อมูล)');
+    } catch (e) {
+      _say('ผิดพลาด: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _disconnect() async {
-    await _usbRx?.cancel();
-    _usbRx = null;
+    await _kl?.dispose();
+    _kl = null;
     try {
       await _port?.close();
     } catch (_) {}
@@ -263,7 +285,7 @@ class _HomePageState extends State<HomePage> {
               Icon(connected ? Icons.check_circle : Icons.circle_outlined, color: connected ? kGreen : kMut),
               const SizedBox(width: 10),
               Expanded(child: Text(status, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
-              if (link == Link.usb) Text('RX $_rxBytes B', style: const TextStyle(color: kMut, fontSize: 12)),
+              if (link == Link.usb) Text('RX ${_kl?.rx ?? 0} B', style: const TextStyle(color: kMut, fontSize: 12)),
             ]),
           ),
           const SizedBox(height: 14),
@@ -276,6 +298,20 @@ class _HomePageState extends State<HomePage> {
               icon: Icons.bluetooth, color: kGreen, title: 'เชื่อมต่อเกจ', sub: 'บลูทูธ',
               active: link == Link.ble, onTap: connected ? null : _connectBle)),
           ]),
+          if (link == Link.usb) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: _busy ? null : _readId,
+                style: ElevatedButton.styleFrom(backgroundColor: kCyan, foregroundColor: Colors.black),
+                icon: _busy
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    : const Icon(Icons.memory),
+                label: Text(_busy ? 'กำลังอ่าน…' : 'อ่าน ECM ID / รู้จักรุ่น', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           const Align(alignment: Alignment.centerLeft, child: Text('บันทึก', style: TextStyle(color: kMut, fontWeight: FontWeight.bold))),
           const SizedBox(height: 6),
