@@ -7,7 +7,7 @@ import 'package:usb_serial_next/usb_serial_next.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'kline.dart';
-import 'ecu_db.dart';
+import 'ecu_models.dart';
 import 'tune.dart';
 
 const _bg = Color(0xFF0E1116);
