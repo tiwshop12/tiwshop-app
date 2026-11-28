@@ -611,7 +611,7 @@ class _FlashPageState extends State<FlashPage> {
             _kv('พาร์ท', t.ecu?.part ?? '—', col: t.ecu != null ? Colors.white : Colors.white38),
             _kv('ECM ID', t.ecmId ?? '—', col: t.ecmId != null ? th.c2 : Colors.white38),
             _kv('ชนิดกล่อง', vDet ?? (t.ecu != null ? (t.ecu!.shin ? 'Shindengen' : 'Keihin') : '—'), col: Colors.white),
-            _kv('จำนวนแฟลช', t.flashCount != null ? '${t.flashCount} ครั้ง' : (c.onCable ? 'อ่านไม่ได้' : '— (ต่อสายเพื่อดู)'), col: t.flashCount != null ? kAmber : Colors.white38),
+            _kv('จำนวนแฟลช', t.flashCount != null ? '${t.flashCount} ครั้ง' : (conn ? 'กำลังอ่าน…' : '—'), col: t.flashCount != null ? kAmber : Colors.white38),
             _kv('เกจ FW', t.fwText ?? '—', col: t.flashSup ? kGreen : (conn ? kAmber : Colors.white38)),
           ])),
           // FLASH ECU: เลือกไฟล์ -> กดปุ่มเดียว (แอพส่งไฟล์ไปเกจ แล้วสั่งเขียนต่อทันที)

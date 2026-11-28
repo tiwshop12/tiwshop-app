@@ -346,6 +346,7 @@ class Telemetry {
       ecmId: (b.length >= 84 && (b[79] | b[80] | b[81] | b[82] | b[83]) != 0)
           ? b.sublist(79, 84).map((x) => x.toRadixString(16).padLeft(2, '0')).join().toUpperCase()
           : null,
+      flashCount: (b.length >= 85 && b[84] != 255) ? b[84] : null, // จำนวนแฟลชจากเกจ (ไบต์ 84)
     );
   }
 }
